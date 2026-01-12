@@ -68,6 +68,7 @@
         <div class="collapse ms-3 border-start ps-2" id="submenu-riwayat">
             <a href="#" onclick="event.preventDefault(); showPage('riwayat-jual')" class="nav-link py-2" style="font-size: 14px;"> Penjualan</a>
             <a href="#" onclick="event.preventDefault(); showPage('riwayat-beli')" class="nav-link py-2" style="font-size: 14px;"> Pembelian</a>
+            <a href="#" onclick="event.preventDefault(); showPage('riwayat-piutang')" class="nav-link py-2 text-danger fw-bold" style="font-size: 14px;"> Piutang (Bon)</a>
         </div>
         <a href="#" onclick="event.preventDefault(); showPage('pembelian')" class="nav-link" id="nav-pembelian">
           <i class="material-icons align-middle">shopping_bag</i> Stok Masuk
@@ -98,6 +99,12 @@
         </div>
 
         <div class="dropdown">
+          <div class="position-relative me-3" style="cursor: pointer;" onclick="cekNotifHutang()">
+                <i class="material-icons text-muted" style="font-size: 26px;">notifications</i>
+                <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 10px;">
+                    0
+                </span>
+            </div>
             <div class="user-profile d-flex align-items-center" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
               <div class="text-end me-2 lh-1 d-none d-sm-block">
                   <div class="fw-bold text-dark" style="font-size: 14px;" id="display-user">Admin</div>
@@ -226,6 +233,24 @@
                  <span class="fw-bold fs-4 text-primary" id="pos-grand-total">Rp 0</span>
               </div>
               
+
+              
+              <div class="mb-3">
+                  <label class="small fw-bold text-muted mb-1">Metode Pembayaran</label>
+                  <select id="pos-metode-bayar" class="form-select fw-bold border-secondary">
+                      <option value="Tunai" selected>Tunai (Cash)</option>
+                      <option value="BCA">Transfer BNI</option>
+                      <option value="BCA">Transfer BCA</option>
+                      <option value="BRI">Transfer BRI</option>
+                      <option value="Mandiri">Transfer Mandiri</option>
+                      <option value="QRIS">QRIS / E-Wallet</option>
+                      <option value="Hutang">⚠️ Hutang / Bon</option>
+                  </select>
+                    <div id="box-jatuh-tempo" class="mt-2 d-none">
+                      <label class="small fw-bold text-danger">Jatuh Tempo (Janji Bayar)</label>
+                      <input type="date" id="pos-jatuh-tempo" class="form-control border-danger text-danger fw-bold">
+                  </div>
+              </div>
               <div class="d-grid gap-2">
                  <button onclick="prosesBayarFinal()" class="btn btn-primary py-3 fw-bold rounded-pill shadow-lg">PROSES BAYAR</button>
                  <button onclick="resetKeranjang()" class="btn btn-light text-danger py-2 rounded-pill small">Batalkan Transaksi</button>
@@ -327,6 +352,33 @@
                   </table>
                 </div>
             </div>
+          </div>
+
+          <div id="page-riwayat-piutang" class="page-section d-none">
+              <div class="d-flex justify-content-between align-items-center mb-4">
+                  <h3 class="page-title text-danger">Daftar Piutang (Bon)</h3>
+                  <button class="btn btn-primary rounded-pill btn-sm px-3" onclick="loadPiutang()">
+                    <i class="material-icons align-middle" style="font-size:16px">refresh</i> Refresh Data
+                  </button>
+              </div>
+
+              <div class="card p-4 border-0 shadow-sm">
+                  <div class="alert alert-warning small"><i class="material-icons align-middle" style="font-size:16px">info</i> Halaman ini menampilkan transaksi yang statusnya <b>Belum Lunas</b>. Klik tombol <b>LUNASI</b> jika pelanggan membayar.</div>
+                  
+                  <div class="table-responsive">
+                    <table class="table table-custom table-hover" id="tabel-piutang">
+                        <thead class="bg-light">
+                          <tr>
+                              <th>Jatuh Tempo</th>
+                              <th>Pelanggan</th>
+                              <th>Total Tagihan</th>
+                              <th>Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                  </div>
+              </div>
           </div>
 
          <div id="page-produk" class="page-section d-none">
@@ -550,11 +602,16 @@
             <input id="prod-isi" type="number" class="form-control" placeholder="0">
         </div>
         <div class="col">
-            <label class="small fw-bold">Stok Kosong</label>
-            <input id="prod-kosong" type="number" class="form-control" placeholder="0">
+                    <label class="small fw-bold">Stok Kosong</label>
+                    <input id="prod-kosong" type="number" class="form-control" placeholder="0">
+                </div>
+            </div>
+        </div> 
+        <div class="modal-footer border-top-0">
+            <button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Batal</button>
+            <button type="button" class="btn btn-primary fw-bold rounded-pill px-4" onclick="simpanProduk()">SIMPAN PRODUK</button>
         </div>
-    </div>
-</div>
+        </div></div></div>
 
   <div class="modal fade" id="modalKaryawan" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Karyawan</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
     <input type="hidden" id="kry-id">
