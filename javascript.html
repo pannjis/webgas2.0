@@ -147,29 +147,35 @@ function showPage(pageId) {
     }
 }
 
-  // --- AUTH ---
-  function handleLogin() {
-    const u = document.getElementById('username').value;
-    const p = document.getElementById('password').value;
-    
-    loading(true); // MULAI LOADING
+// [GANTI] Fungsi handleLogin yang lama dengan ini
+function handleLogin() {
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  
+  loading(true); // Layar Gelap Nyala
 
-    google.script.run.withSuccessHandler(res => {
-      loading(false); // STOP LOADING
-      if(res.status === 'success') {
-        currentUser = res;
-        document.getElementById('login-section').classList.add('d-none');
-        document.getElementById('main-app').classList.remove('d-none');
-        document.getElementById('display-user').innerText = res.nama;
-        showPage('dashboard');
-      } else { 
+  google.script.run.withSuccessHandler(res => {
+    loading(false); // 1. Matikan Layar Gelap
+    
+    // 2. Beri jeda 0.3 detik agar layar gelap hilang sempurna, baru cek status
+    setTimeout(() => {
+        if(res.status === 'success') {
+          currentUser = res;
+          document.getElementById('login-section').classList.add('d-none');
+          document.getElementById('main-app').classList.remove('d-none');
+          document.getElementById('display-user').innerText = res.nama;
+          showPage('dashboard');
+        } else { 
+          // Jika Gagal, popup akan muncul sekarang (tanpa tertutup layar gelap)
           myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
-      }
-    }).withFailureHandler(e => {
-        loading(false);
-        myAlert('Error Koneksi', e, 'error');
-    }).loginUser(u, p);
-  }
+        }
+    }, 300); 
+
+  }).withFailureHandler(e => {
+      loading(false);
+      setTimeout(() => { myAlert('Error Koneksi', e, 'error'); }, 300);
+  }).loginUser(u, p);
+}
   
   function logout() { location.reload(); }
 
@@ -191,9 +197,34 @@ function loadProduk() {
     google.script.run.withSuccessHandler(data => {
       loading(false);
       globalProdukList = data; // Simpan ke global
-      renderProdukGrid(data);  // Render awal
       
-      // Update juga dropdown di halaman Stok Masuk (Beli) yang masih pakai dropdown biasa
+      // 1. Render Grid Kasir (POS)
+      renderProdukGrid(data);  
+      
+      // 2. Render Tabel Admin (YANG HILANG SEBELUMNYA)
+      const tb = document.querySelector('#tabel-produk tbody');
+      if(tb) {
+         tb.innerHTML = ''; // Kosongkan tabel dulu
+         data.forEach(r => {
+            // Mapping Index: 0:ID, 1:Nama, 2:Jual, 3:Beli, 4:Stok Isi, 5:Stok Kosong
+            tb.innerHTML += `
+              <tr>
+                <td class="fw-bold">${r[1]}</td>
+                <td>${rupiah(r[2])}</td>
+                <td>${rupiah(r[3])}</td>
+                <td class="text-center">${r[4]}</td>
+                <td class="text-center">${r[5]}</td>
+                <td>
+                   <button class="btn btn-sm btn-light text-danger border" onclick="hapusProduk('${r[1]}')">
+                     <i class="material-icons" style="font-size:14px">delete</i>
+                   </button>
+                </td>
+              </tr>
+            `;
+         });
+      }
+
+      // 3. Update Dropdown di halaman Stok Masuk (Beli)
       const selB = document.getElementById('beli-produk');
       if(selB) {
          selB.innerHTML = '<option value="">--Pilih--</option>';
@@ -206,28 +237,49 @@ function loadProduk() {
 // Fungsi Render Grid
 function renderProdukGrid(data) {
    const container = document.getElementById('pos-grid-container');
-   if(!container) return; // Penjagaan jika bukan di halaman kasir
+   if(!container) return;
    
    container.innerHTML = '';
 
    data.forEach(p => {
-      // p[1]:Nama, p[2]:Jual, p[4]:Stok
+      // Index Data: 
+      // 0:ID, 1:Nama, 2:Jual, 3:Beli, 4:Isi, 5:Kosong, 6:SKU, 7:Kode, 8:Gambar
+      
+      let nama = p[1];
+      let harga = p[2];
       let stok = Number(p[4]);
+      let linkGambar = p[8]; // Ambil link gambar dari kolom index 8
+
+      // Logika Tampilan Gambar
+      let gambarHtml = '';
+      if(linkGambar && linkGambar.length > 5) {
+          // Jika ada link gambar, pakai tag IMG
+          gambarHtml = `<img src="${linkGambar}" class="mb-2 rounded" style="width: 100%; height: 100px; object-fit: contain;">`;
+      } else {
+          // Jika tidak ada, pakai Icon default
+          gambarHtml = `
+           <div class="product-icon mx-auto mb-2">
+              <i class="material-icons">propane</i> 
+           </div>`;
+      }
+
       let disabledClass = stok <= 0 ? 'opacity-50 grayscale' : '';
       let badgeStok = stok > 0 
           ? `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size:10px;">Stok: ${stok}</span>` 
           : `<span class="badge bg-danger text-white rounded-pill">Habis</span>`;
+      
+      // Tampilkan SKU/Kode kecil di atas nama (Opsional)
+      let kodeHtml = p[6] ? `<small class="text-muted d-block mb-1" style="font-size:10px;">${p[6]}</small>` : '';
 
       container.innerHTML += `
       <div class="col-6 col-md-4 col-lg-3">
          <div class="card h-100 product-card border-0 shadow-sm ${disabledClass}" 
-              onclick="klikProdukPOS('${p[1]}', ${p[2]}, ${stok})">
-            <div class="card-body text-center p-3">
-               <div class="product-icon">
-                  <i class="material-icons">propane</i> 
-               </div>
-               <h6 class="fw-bold text-dark mb-1 text-truncate" title="${p[1]}">${p[1]}</h6>
-               <div class="text-primary fw-bold mb-2">${rupiah(p[2])}</div>
+              onclick="klikProdukPOS('${nama}', ${harga}, ${stok})">
+            <div class="card-body text-center p-2">
+               ${gambarHtml}
+               ${kodeHtml}
+               <h6 class="fw-bold text-dark mb-1 text-truncate" title="${nama}" style="font-size: 0.9rem;">${nama}</h6>
+               <div class="text-primary fw-bold mb-2 small">${rupiah(harga)}</div>
                ${badgeStok}
             </div>
          </div>
@@ -378,16 +430,85 @@ resetKeranjang = function() {
     renderKeranjangPOS();
 }
 
-  function simpanProduk() {
-    const d = {nama: document.getElementById('prod-nama').value, hargaJual: document.getElementById('prod-jual').value, hargaBeli: document.getElementById('prod-beli').value, stokIsi: document.getElementById('prod-isi').value, stokKosong: document.getElementById('prod-kosong').value};
+function simpanProduk() {
+    const fileInput = document.getElementById('prod-file-gambar');
+    const file = fileInput.files[0];
     
-    loading(true);
-    google.script.run.withSuccessHandler(() => { 
-        loading(false);
-        bootstrap.Modal.getInstance(document.getElementById('modalProduk')).hide(); 
-        loadProduk(); 
-    }).tambahProduk(d);
-  }
+    // Ambil data form lainnya
+    const dataForm = {
+        sku: document.getElementById('prod-sku').value,
+        kode: document.getElementById('prod-kode').value,
+        nama: document.getElementById('prod-nama').value, 
+        hargaJual: document.getElementById('prod-jual').value, 
+        hargaBeli: document.getElementById('prod-beli').value, 
+        stokIsi: document.getElementById('prod-isi').value, 
+        stokKosong: document.getElementById('prod-kosong').value,
+        gambar: '' // Nanti diisi
+    };
+
+    // Fungsi untuk mengirim data ke Google Script
+    const kirimData = (finalData) => {
+        loading(true);
+        google.script.run.withSuccessHandler(() => { 
+            loading(false);
+            document.getElementById('loading-upload')?.classList.add('d-none');
+            
+            // [TAMBAHAN] Reset Preview & Input File
+            document.getElementById('img-preview').classList.add('d-none');
+            document.getElementById('img-preview').src = '';
+            
+            bootstrap.Modal.getInstance(document.getElementById('modalProduk')).hide(); 
+            loadProduk(); 
+            document.querySelectorAll('#modalProduk input').forEach(i => i.value = '');
+        }).tambahProduk(dataForm);
+    };
+
+    // LOGIKA UPLOAD GAMBAR
+    if (file) {
+        // Validasi ukuran (misal maks 2MB agar tidak berat)
+        if (file.size > 2 * 1024 * 1024) {
+            return myAlert('File Terlalu Besar', 'Maksimal ukuran gambar 2MB', 'error');
+        }
+
+        document.getElementById('loading-upload').classList.remove('d-none'); // Tampilkan loading teks
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Isi properti gambar dengan data file (base64)
+            dataForm.gambar = {
+                data: e.target.result.split(',')[1], // Ambil base64-nya saja
+                mimeType: file.type,
+                fileName: 'PROD-' + Date.now() // Nama file unik
+            };
+            kirimData(dataForm); // Kirim setelah file terbaca
+        };
+        reader.readAsDataURL(file);
+    } else {
+        // Jika tidak ada gambar, langsung kirim data kosong
+        dataForm.gambar = null;
+        kirimData(dataForm);
+    }
+}
+
+// [TAMBAHAN] Fungsi untuk Preview Gambar
+function tampilkanPreview(input) {
+    const preview = document.getElementById('img-preview');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            preview.src = e.target.result; // Isi sumber gambar dengan hasil bacaan file
+            preview.classList.remove('d-none'); // Munculkan gambar
+        }
+
+        reader.readAsDataURL(input.files[0]); // Mulai membaca file
+    } else {
+        // Jika user batal milih file, sembunyikan lagi gambarnya
+        preview.src = '';
+        preview.classList.add('d-none');
+    }
+}
 
 function hapusProduk(n) { 
       myConfirm('Hapus Produk', `Yakin hapus produk ${n}?`, () => {
