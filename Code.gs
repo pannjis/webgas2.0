@@ -74,9 +74,51 @@ function getDashboardStats() {
 }
 
 // --- PRODUK ---
+// [UPDATE] Fungsi Tambah Produk dengan Upload Gambar
 function tambahProduk(form) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('PRODUK');
-  sheet.appendRow(['P-' + Date.now(), form.nama, form.hargaJual, form.hargaBeli, form.stokIsi, form.stokKosong]);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('PRODUK');
+  
+  let imageUrl = '';
+
+  // PROSES UPLOAD KE DRIVE
+  if (form.gambar && form.gambar.data) {
+    try {
+      // 1. Decode data gambar
+      const decoded = Utilities.base64Decode(form.gambar.data);
+      const blob = Utilities.newBlob(decoded, form.gambar.mimeType, form.gambar.fileName);
+      
+      // 2. Simpan ke Google Drive (Root Folder atau Folder Khusus)
+      // Jika ingin folder khusus: DriveApp.getFolderById('ID_FOLDER').createFile(blob);
+      const file = DriveApp.createFile(blob); 
+      
+      // 3. Set Permission agar bisa dilihat publik (PENTING untuk tag <img>)
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      
+      // 4. Buat Link Direct (Trik agar bisa tampil di HTML)
+      // Format standard view: https://drive.google.com/uc?export=view&id=FILE_ID
+      imageUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+      
+    } catch (e) {
+      imageUrl = ''; // Jika gagal, kosongkan saja
+    }
+  } else {
+    // Jika user memasukkan link manual (backward compatibility) atau kosong
+    imageUrl = (typeof form.gambar === 'string') ? form.gambar : '';
+  }
+
+  // Simpan ke Spreadsheet
+  sheet.appendRow([
+    'P-' + Date.now(), 
+    form.nama, 
+    form.hargaJual, 
+    form.hargaBeli, 
+    form.stokIsi, 
+    form.stokKosong,
+    form.sku,     
+    form.kode,    
+    imageUrl      // Link dari Drive masuk ke sini (Kolom I)
+  ]);
 }
 
 function hapusProduk(nama) {
