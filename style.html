@@ -269,4 +269,12 @@
 .grid-scroll-area::-webkit-scrollbar-thumb:hover {
   background-color: #9ca3af; /* Warna saat di-hover */
 }
+
+/* [TAMBAHAN] Pastikan Modal/Popup selalu di atas Loading Overlay (9999) */
+.modal {
+    z-index: 10050 !important;
+}
+.modal-backdrop {
+    z-index: 10040 !important;
+}
 </style>
