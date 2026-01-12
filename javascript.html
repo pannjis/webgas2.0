@@ -12,7 +12,17 @@
   let onConfirmAction = null;
   const rupiah = (n) => new Intl.NumberFormat('id-ID', {style: 'currency', currency: 'IDR', minimumFractionDigits:0}).format(n);
 
-  window.onload = function() { google.script.run.setupDatabase(); };
+window.onload = function() { 
+      // 1. Setup Database
+      google.script.run.setupDatabase(); 
+
+      // 2. [FIX PENTING] Pindahkan semua Modal ke Body agar tidak tertutup layar gelap
+      const modals = document.querySelectorAll('.modal');
+      modals.forEach(m => document.body.appendChild(m));
+
+      // 3. Init Modal Global
+      initModal();
+  };
 
   function initModal() {
      if(!globalModalObj) globalModalObj = new bootstrap.Modal(document.getElementById('globalModal'));
@@ -145,36 +155,40 @@ function showPage(pageId) {
         setAutoDate('beli'); // Isi tanggal 1 s/d hari ini
         loadRiwayatBeli();   // Langsung ambil data
     }
+    
+    if(pageId === 'riwayat-piutang') loadPiutang();
 }
 
-// [GANTI] Fungsi handleLogin yang lama dengan ini
 function handleLogin() {
   const u = document.getElementById('username').value;
   const p = document.getElementById('password').value;
   
-  loading(true); // Layar Gelap Nyala
+  if(!u || !p) return myAlert('Isian Kosong', 'Harap isi username & password!', 'warning');
 
-  google.script.run.withSuccessHandler(res => {
-    loading(false); // 1. Matikan Layar Gelap
-    
-    // 2. Beri jeda 0.3 detik agar layar gelap hilang sempurna, baru cek status
-    setTimeout(() => {
-        if(res.status === 'success') {
-          currentUser = res;
-          document.getElementById('login-section').classList.add('d-none');
-          document.getElementById('main-app').classList.remove('d-none');
-          document.getElementById('display-user').innerText = res.nama;
-          showPage('dashboard');
-        } else { 
-          // Jika Gagal, popup akan muncul sekarang (tanpa tertutup layar gelap)
-          myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
-        }
-    }, 300); 
+  loading(true); // Layar Putih Nyala
 
-  }).withFailureHandler(e => {
-      loading(false);
-      setTimeout(() => { myAlert('Error Koneksi', e, 'error'); }, 300);
-  }).loginUser(u, p);
+  google.script.run
+    .withSuccessHandler(function(res) {
+        loading(false); // MATIKAN Layar Putih (Wajib di sini)
+        
+        setTimeout(function() {
+            if(res.status === 'success') {
+               currentUser = res;
+               document.getElementById('login-section').classList.add('d-none');
+               document.getElementById('main-app').classList.remove('d-none');
+               document.getElementById('display-user').innerText = res.nama;
+               showPage('dashboard');
+            } else {
+               // Jika salah password, popup akan muncul SEKARANG
+               myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
+            }
+        }, 300); // Jeda 0.3 detik agar transisi mulus
+    })
+    .withFailureHandler(function(e) {
+        loading(false); // MATIKAN Layar Putih jika error
+        setTimeout(function() { myAlert('Error Server', 'Gagal terhubung: ' + e, 'error'); }, 300);
+    })
+    .loginUser(u, p);
 }
   
   function logout() { location.reload(); }
@@ -547,32 +561,43 @@ function prosesBayarFinal() {
     let butuhTabungKosong = 0;
     keranjangBelanja.forEach(k => { if(k.tipe === 'Tukar (Refill)') butuhTabungKosong += k.qty; });
 
-    // --- FUNGSI PEMBAYARAN UTAMA ---
-    const eksekusiBayar = () => {
-        const totalBayarStr = document.getElementById('label-grand-total').innerText;
-        
-        // Konfirmasi Kedua: Total Bayar
-        myConfirm('Konfirmasi Pembayaran', `Total Transaksi: ${totalBayarStr}\n\nSimpan data ini?`, () => {
+const eksekusiBayar = () => {
+    // PERBAIKAN: Gunakan ID 'pos-grand-total' yang sesuai dengan HTML
+    const totalBayarStr = document.getElementById('pos-grand-total').innerText; 
+    
+    myConfirm('Konfirmasi Pembayaran', `Total Transaksi: ${totalBayarStr}\n\nSimpan data ini?`, () => {
             
-            const payload = {
-              pelanggan: document.getElementById('kasir-pelanggan').value,
-              kasir: currentUser.nama || 'Admin',
-              items: keranjangBelanja
-            };
+            // AMBIL METODE PEMBAYARAN DARI HTML
+            // AMBIL DATA
+                const metodeDipilih = document.getElementById('pos-metode-bayar').value;
+                const tglJatuhTempo = document.getElementById('pos-jatuh-tempo').value; // Ambil tanggal
+
+                // Validasi Hutang Wajib Isi Tanggal
+                if(metodeDipilih === 'Hutang' && !tglJatuhTempo) {
+                    return myAlert('Error', 'Untuk Hutang, Tanggal Jatuh Tempo wajib diisi!', 'warning');
+                }
+
+                const payload = {
+                    pelanggan: document.getElementById('kasir-pelanggan').value,
+                    kasir: currentUser.nama || 'Admin',
+                    metode: metodeDipilih,
+                    jatuhTempo: (metodeDipilih === 'Hutang') ? tglJatuhTempo : '', // Kirim tanggal
+                    items: keranjangBelanja
+                };
 
             loading(true);
-            google.script.run.withSuccessHandler(res => {
-               loading(false);
-               myAlert('Berhasil', res, 'success'); 
-               resetKeranjang();
-               loadProduk(); 
-            }).withFailureHandler(err => {
-               loading(false);
-               myAlert('Gagal', err, 'error');
-            }).simpanTransaksiBulk(payload);
+        google.script.run.withSuccessHandler(res => {
+           loading(false);
+           myAlert('Berhasil', res, 'success'); 
+           resetKeranjang();
+           loadProduk(); 
+        }).withFailureHandler(err => {
+           loading(false);
+           myAlert('Gagal', err, 'error');
+        }).simpanTransaksiBulk(payload);
 
-        });
-    };
+    });
+};
 
     // --- LOGIC PENGECEKAN TABUNG ---
     if(butuhTabungKosong > 0) {
@@ -592,6 +617,26 @@ function prosesBayarFinal() {
        eksekusiBayar();
     }
   }
+
+  function loadNotifHutang() {
+    google.script.run.withSuccessHandler(jumlah => {
+        const badge = document.getElementById('notif-badge');
+        if(jumlah > 0) {
+            badge.innerText = jumlah;
+            badge.classList.remove('d-none');
+        } else {
+            badge.classList.add('d-none');
+        }
+    }).getJumlahJatuhTempo();
+}
+
+// Panggil fungsi ini di window.onload agar saat buka aplikasi langsung cek
+// Tambahkan di dalam window.onload = function() { ... loadNotifHutang(); ... }
+
+function cekNotifHutang() {
+    // Nanti diarahkan ke halaman khusus hutang (Sementara alert dulu)
+    myAlert('Info Tagihan', 'Silakan buka menu Riwayat > Piutang untuk melihat detail penagihan.', 'info');
+}
 
   function updateHargaBeli() {
     const sel = document.getElementById('beli-produk');
@@ -1316,5 +1361,85 @@ function setAutoDate(tipe) {
 
     if(elStart) elStart.value = toStr(firstDay);
     if(elEnd) elEnd.value = toStr(now);
+}
+
+// Listener untuk Metode Bayar
+document.getElementById('pos-metode-bayar').addEventListener('change', function() {
+    const val = this.value;
+    const box = document.getElementById('box-jatuh-tempo');
+    
+    if(val === 'Hutang') {
+        box.classList.remove('d-none'); // Munculkan tanggal
+        // Set default jatuh tempo: 7 hari dari sekarang
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        document.getElementById('pos-jatuh-tempo').value = nextWeek.toISOString().split('T')[0];
+    } else {
+        box.classList.add('d-none'); // Sembunyikan
+    }
+});
+
+// --- FITUR PIUTANG ---
+
+// 1. Load Data Piutang saat menu diklik
+// (Tambahkan ini di dalam fungsi showPage, di bagian blok IF nya)
+// if(pageId === 'riwayat-piutang') loadPiutang(); 
+
+function loadPiutang() {
+   loading(true);
+   google.script.run.withSuccessHandler(data => {
+      loading(false);
+      const tb = document.querySelector('#tabel-piutang tbody');
+      tb.innerHTML = '';
+      
+      if(!data || data.length === 0) {
+         tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-4">Tidak ada data hutang yang belum lunas.</td></tr>';
+         return;
+      }
+
+      data.forEach(row => {
+         // row: [ID, Waktu, Pelanggan, Total, JatuhTempo]
+         let tglTempo = new Date(row[4]).toLocaleDateString('id-ID');
+         let tglTrx = new Date(row[1]).toLocaleDateString('id-ID');
+         
+         // Cek jika sudah lewat jatuh tempo (warna merah)
+         let isLate = new Date(row[4]) < new Date();
+         let tempoStyle = isLate ? 'text-danger fw-bold' : 'text-dark';
+         let badgeLate = isLate ? '<span class="badge bg-danger">Lewat Jatuh Tempo</span>' : '';
+
+         tb.innerHTML += `
+           <tr>
+              <td>
+                 <div class="${tempoStyle}">${tglTempo}</div>
+                 ${badgeLate}
+                 <small class="text-muted d-block">Trx: ${tglTrx}</small>
+              </td>
+              <td>
+                 <span class="fw-bold">${row[2]}</span><br>
+                 <small class="text-muted text-truncate d-block" style="max-width:200px">ID: ${row[0]}</small>
+              </td>
+              <td class="fw-bold fs-5 text-danger">${rupiah(row[3])}</td>
+              <td>
+                 <button class="btn btn-success btn-sm rounded-pill px-3 fw-bold" onclick="prosesPelunasan('${row[0]}', '${row[2]}', ${row[3]})">
+                    <i class="material-icons align-middle" style="font-size:16px">payments</i> LUNASI
+                 </button>
+              </td>
+           </tr>
+         `;
+      });
+   }).getDataPiutang();
+}
+
+function prosesPelunasan(id, nama, total) {
+    myConfirm('Pelunasan Hutang', `Terima pembayaran sebesar ${rupiah(total)} dari ${nama}?\n\nData akan dicatat ke KEUANGAN (Pemasukan) dan status transaksi menjadi LUNAS.`, () => {
+        loading(true);
+        google.script.run.withSuccessHandler(res => {
+            loading(false);
+            myAlert('Berhasil', res, 'success');
+            loadPiutang();      // Refresh tabel piutang
+            loadDashboard();    // Update uang di dashboard
+            loadNotifHutang();  // Update lonceng notifikasi
+        }).lunasiHutang(id, total, nama);
+    });
 }
 </script>
