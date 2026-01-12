@@ -15,10 +15,10 @@ function setupDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = [
     {name: 'USERS', header: ['Username', 'Password', 'Role', 'Nama']},
-    {name: 'PRODUK', header: ['ID', 'Nama_Produk', 'Harga_Jual', 'Harga_Beli', 'Stok_Isi', 'Stok_Kosong']},
+    {name: 'PRODUK', header: ['ID', 'Nama_Produk', 'Harga_Jual', 'Harga_Beli', 'Stok_Isi', 'Stok_Kosong', 'SKU', 'Kode', 'Link_Gambar']},
     {name: 'PELANGGAN', header: ['ID', 'Nama', 'NoHP', 'Alamat']},
     {name: 'SUPPLIER', header: ['ID', 'Nama_Supplier', 'NoHP', 'Alamat']},
-    {name: 'TRANSAKSI', header: ['ID_Trans', 'Waktu', 'Pelanggan', 'Produk', 'Qty', 'Total', 'Tipe', 'Kasir']},
+    {name: 'TRANSAKSI', header: ['ID_Trans', 'Waktu', 'Pelanggan', 'Produk', 'Qty', 'Total', 'Tipe', 'Kasir', 'Metode_Bayar', 'Jatuh_Tempo', 'Status']},
     {name: 'PEMBELIAN', header: ['ID_Beli', 'Waktu', 'Supplier', 'Produk', 'Qty', 'Total', 'Metode']},
     {name: 'KEUANGAN', header: ['ID', 'Tanggal', 'Jenis', 'Kategori', 'Nominal', 'Keterangan']},
     {name: 'KATEGORI', header: ['Nama_Kategori']},
@@ -73,37 +73,50 @@ function getDashboardStats() {
   return { income, expense, net: income - expense };
 }
 
-// --- PRODUK ---
-// [UPDATE] Fungsi Tambah Produk dengan Upload Gambar
+// [UPDATE] Fungsi Tambah Produk (Versi Debugging)
+// [UPDATE] Fungsi Tambah Produk (Upload ke Folder Khusus)
 function tambahProduk(form) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('PRODUK');
   
+  // ID Folder Google Drive Anda
+  const FOLDER_ID = '15hiLtvusofF2OJpXVq8lJkePbmqVIuPM'; 
+  
   let imageUrl = '';
 
-  // PROSES UPLOAD KE DRIVE
+  // PROSES UPLOAD
   if (form.gambar && form.gambar.data) {
     try {
-      // 1. Decode data gambar
       const decoded = Utilities.base64Decode(form.gambar.data);
       const blob = Utilities.newBlob(decoded, form.gambar.mimeType, form.gambar.fileName);
       
-      // 2. Simpan ke Google Drive (Root Folder atau Folder Khusus)
-      // Jika ingin folder khusus: DriveApp.getFolderById('ID_FOLDER').createFile(blob);
-      const file = DriveApp.createFile(blob); 
+      // 1. Ambil Folder Tujuan
+      const folder = DriveApp.getFolderById(FOLDER_ID);
       
-      // 3. Set Permission agar bisa dilihat publik (PENTING untuk tag <img>)
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      // 2. Simpan File di Folder Tersebut
+      const file = folder.createFile(blob); 
       
-      // 4. Buat Link Direct (Trik agar bisa tampil di HTML)
-      // Format standard view: https://drive.google.com/uc?export=view&id=FILE_ID
-      imageUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
-      
+      // 3. Set Permission (Coba Publik -> Domain -> Private)
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (e1) {
+        try {
+           file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (e2) {
+           console.log("Gagal set permission: " + e1.message); 
+        }
+      }
+
+      // 4. Ambil Link
+      // Ganti format link jadi Thumbnail (agar tidak crash/broken di browser)
+      imageUrl = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1000";
+
     } catch (e) {
-      imageUrl = ''; // Jika gagal, kosongkan saja
+      // Tampilkan error detail jika gagal
+      throw new Error("Gagal Upload: " + e.message); 
     }
   } else {
-    // Jika user memasukkan link manual (backward compatibility) atau kosong
+    // Jika manual link
     imageUrl = (typeof form.gambar === 'string') ? form.gambar : '';
   }
 
@@ -117,7 +130,7 @@ function tambahProduk(form) {
     form.stokKosong,
     form.sku,     
     form.kode,    
-    imageUrl      // Link dari Drive masuk ke sini (Kolom I)
+    imageUrl 
   ]);
 }
 
@@ -139,10 +152,14 @@ function simpanTransaksiBulk(dataTransaksi) {
   const keuSheet = ss.getSheetByName('KEUANGAN');
   
   const prodData = prodSheet.getDataRange().getValues();
-  const idTrxMaster = 'TRX-' + Date.now(); // Satu ID untuk satu keranjang belanja
+  const idTrxMaster = 'TRX-' + Date.now(); 
   const waktu = new Date();
   let totalBelanja = 0;
   let summaryProduk = [];
+
+  // [BAGIAN INI YANG TADI HILANG]
+  // Kita tentukan statusnya SEKALI saja di sini
+  let statusTrx = (dataTransaksi.metode === 'Hutang') ? 'Belum Lunas' : 'Lunas';
 
   // Loop setiap item di keranjang
   dataTransaksi.items.forEach(item => {
@@ -154,7 +171,7 @@ function simpanTransaksiBulk(dataTransaksi) {
         let curIsi = Number(prodData[i][4]);
         let curKosong = Number(prodData[i][5]);
         
-        // Validasi Stok (Server Side)
+        // Validasi Stok
         if (curIsi < item.qty) throw new Error(`Stok ${item.produkNama} Habis! Sisa: ${curIsi}`);
 
         // Update logic
@@ -162,7 +179,7 @@ function simpanTransaksiBulk(dataTransaksi) {
         let newKosong = curKosong;
         
         if (item.tipe === 'Tukar (Refill)') {
-           newKosong = curKosong + Number(item.qty); // Terima tabung kosong
+           newKosong = curKosong + Number(item.qty); 
         }
         
         prodSheet.getRange(i + 1, 5).setValue(newIsi);
@@ -174,24 +191,138 @@ function simpanTransaksiBulk(dataTransaksi) {
     
     if(!itemFound) throw new Error(`Produk ${item.produkNama} tidak ditemukan di database.`);
 
-    // Catat ke Sheet TRANSAKSI (Per Item)
-    // Format: ID_Trans, Waktu, Pelanggan, Produk, Qty, Total_Item, Tipe, Kasir, STATUS
+    // Catat ke Sheet TRANSAKSI
+    // Sekarang variabel 'statusTrx' sudah dikenali karena sudah dibuat di atas loop
     trxSheet.appendRow([
-      idTrxMaster, waktu, dataTransaksi.pelanggan, item.produkNama, 
-      item.qty, item.total, item.tipe, dataTransaksi.kasir, 'Sukses'
+      idTrxMaster, 
+      waktu, 
+      dataTransaksi.pelanggan, 
+      item.produkNama, 
+      item.qty, 
+      item.total, 
+      item.tipe, 
+      dataTransaksi.kasir, 
+      dataTransaksi.metode, 
+      dataTransaksi.jatuhTempo, 
+      statusTrx 
     ]);
 
     totalBelanja += Number(item.total);
     summaryProduk.push(`${item.produkNama} (${item.qty})`);
   });
 
-  // Catat ke KEUANGAN (Satu baris per struk)
-  keuSheet.appendRow([
-    'FIN-' + idTrxMaster, waktu, 'Pemasukan', 'Penjualan Gas', 
-    totalBelanja, `Penjualan: ${summaryProduk.join(', ')}`
+  // LOGIKA KEUANGAN (Hanya catat jika BUKAN Hutang)
+  if (dataTransaksi.metode !== 'Hutang') {
+      keuSheet.appendRow([
+        'FIN-' + idTrxMaster, waktu, 'Pemasukan', 'Penjualan Gas', 
+        totalBelanja, `Penjualan: ${summaryProduk.join(', ')} (${dataTransaksi.metode})`
+      ]);
+  }
+  
+  return "Transaksi Berhasil Disimpan!";
+}
+
+// --- FITUR PIUTANG (BACKEND) ---
+
+// --- FITUR PIUTANG (VERSI SMART COLUMN) ---
+
+function getDataPiutang() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TRANSAKSI');
+  // Ambil semua data TERMASUK Header (Judul Kolom)
+  const allData = sheet.getDataRange().getValues();
+  
+  // Cek jika data kosong
+  if (allData.length < 2) return [];
+
+  const headers = allData[0]; // Baris pertama adalah Header
+  
+  // [PENTING] Cari urutan kolom secara otomatis berdasarkan Namanya
+  // Ini mencegah error jika kolom tergeser
+  const idxStatus = headers.indexOf('Status'); 
+  const idxJatuhTempo = headers.indexOf('Jatuh_Tempo');
+  const idxMetode = headers.indexOf('Metode_Bayar'); 
+  
+  // Jika kolom Status tidak ditemukan, hentikan (daripada error)
+  if (idxStatus === -1) return [];
+
+  let grouped = {};
+
+  // Loop mulai dari baris ke-2 (Index 1) karena baris 0 adalah Header
+  for (let i = 1; i < allData.length; i++) {
+    let row = allData[i];
+    let status = row[idxStatus]; // Ambil status dari kolom yang ditemukan tadi
+
+    // Logika Filter: Hanya ambil yang "Belum Lunas"
+    if (status === 'Belum Lunas') {
+       let id = row[0]; // ID selalu di kolom pertama
+       
+       if(!grouped[id]) {
+          grouped[id] = {
+             id: id,
+             waktu: row[1],
+             pelanggan: row[2],
+             total: 0,
+             jatuhTempo: (idxJatuhTempo !== -1) ? row[idxJatuhTempo] : '' // Ambil tgl jika kolom ada
+          };
+       }
+       // Jumlahkan total (Pastikan angka)
+       grouped[id].total += Number(row[5]); 
+    }
+  }
+
+  // Kembalikan hasil dalam bentuk Array
+  return Object.values(grouped).map(x => [x.id, x.waktu, x.pelanggan, x.total, x.jatuhTempo]);
+}
+
+// 2. Proses Pelunasan
+function lunasiHutang(idTrx, totalBayar, namaPelanggan) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetTrx = ss.getSheetByName('TRANSAKSI');
+  const sheetKeu = ss.getSheetByName('KEUANGAN');
+  
+  const dataTrx = sheetTrx.getDataRange().getValues();
+  
+  // A. Update Status di TRANSAKSI jadi 'Lunas'
+  for(let i=1; i<dataTrx.length; i++) {
+     if(dataTrx[i][0] == idTrx) {
+        // Kolom K (Index 11, karena start dari 1 di sheet) -> Kolom ke-11
+        sheetTrx.getRange(i+1, 11).setValue('Lunas'); 
+     }
+  }
+
+  // B. Masukkan Uang ke KEUANGAN (Karena baru terima duit sekarang)
+  sheetKeu.appendRow([
+      'LUNAS-' + Date.now(), 
+      new Date(), 
+      'Pemasukan', 
+      'Pelunasan Piutang', 
+      totalBayar, 
+      `Pelunasan Bon: ${namaPelanggan} (${idTrx})`
   ]);
 
-  return "Transaksi Berhasil Disimpan!";
+  return "Hutang Berhasil Dilunasi & Masuk Kas!";
+}
+
+function getJumlahJatuhTempo() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TRANSAKSI');
+  const data = sheet.getDataRange().getValues();
+  const today = new Date();
+  let count = 0;
+  let uniqueIDs = []; // Supaya tidak double hitung item dalam 1 struk
+
+  // Loop data transaksi
+  for (let i = 1; i < data.length; i++) {
+    let idTrx = data[i][0];
+    let status = data[i][10]; // Kolom K (Status)
+    let tglTempo = new Date(data[i][9]); // Kolom J (Jatuh Tempo)
+
+    // Logika: Status Belum Lunas DAN Tanggal Tempo < Hari Ini (Sudah lewat)
+    if (status === 'Belum Lunas' && tglTempo <= today && !uniqueIDs.includes(idTrx)) {
+       count++;
+       uniqueIDs.push(idTrx);
+    }
+  }
+  return count;
 }
 
 // 2. Ambil Riwayat Transaksi
@@ -633,4 +764,16 @@ function prosesPayrollFinal(listGaji) {
   
   keuSheet.appendRow(['PAY-' + Date.now(), new Date(), 'Pengeluaran', 'Gaji Karyawan', totalKeluar, 'Payroll Periode Ini']);
   return "Gaji Dicairkan & Kasbon Terpotong.";
+}
+
+function TES_BIKIN_FILE() {
+  // ID Folder Anda
+  const id = '15hiLtvusofF2OJpXVq8lJkePbmqVIuPM'; 
+  
+  const folder = DriveApp.getFolderById(id);
+  
+  // Kita coba bikin file teks kosong beneran untuk mancing izin "Write"
+  folder.createFile('Tes_Izin.txt', 'Halo, ini tes izin upload.');
+  
+  console.log("Sukses! Izin Upload sudah aktif.");
 }
