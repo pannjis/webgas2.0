@@ -502,12 +502,59 @@
             </div>
          </div>
 
-      </div> </div> </div> <div class="modal fade" id="modalProduk" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Produk</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+      </div> </div> </div> <div class="modal fade" id="modalProduk" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Produk</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+
+      <div class="modal-body">
+    <div class="row mb-2">
+        <div class="col-6">
+            <label class="small fw-bold">SKU</label>
+            <input id="prod-sku" class="form-control" placeholder="Cth: GAS-3KG">
+        </div>
+        <div class="col-6">
+            <label class="small fw-bold">Kode Produk</label>
+            <input id="prod-kode" class="form-control" placeholder="Barcode/Kode">
+        </div>
+    </div>
+
+    <label class="small fw-bold">Nama Produk</label>
     <input id="prod-nama" class="form-control mb-2" placeholder="Nama Produk">
-    <input id="prod-jual" type="number" class="form-control mb-2" placeholder="Harga Jual">
-    <input id="prod-beli" type="number" class="form-control mb-2" placeholder="Harga Beli">
-    <div class="row"><div class="col"><input id="prod-isi" type="number" class="form-control" placeholder="Stok Isi"></div><div class="col"><input id="prod-kosong" type="number" class="form-control" placeholder="Stok Kosong"></div></div>
-  </div><div class="modal-footer"><button onclick="simpanProduk()" class="btn btn-primary">Simpan</button></div></div></div></div>
+
+    <label class="small fw-bold">Link Gambar (URL)</label>
+    <label class="small fw-bold">Upload Gambar Produk</label>
+    <input type="file" id="prod-file-gambar" class="form-control mb-2" accept="image/*" onchange="tampilkanPreview(this)">
+
+    <div class="text-center mb-3">
+        <img id="img-preview" src="" class="d-none rounded border shadow-sm" style="max-height: 200px; max-width: 100%; object-fit: contain;">
+    </div>
+
+    <div id="loading-upload" class="text-primary small d-none">
+        <div class="spinner-border spinner-border-sm" role="status"></div> Sedang memproses...
+    </div>
+    <small class="text-muted d-block mb-2" style="font-size:10px">Gambar akan disimpan di Google Drive Anda.</small>
+    <small class="text-muted d-block mb-2" style="font-size:10px">Salin link gambar dari internet/Google Drive (Pastikan link publik).</small>
+
+    <div class="row mb-2">
+        <div class="col-6">
+             <label class="small fw-bold">Harga Jual</label>
+             <input id="prod-jual" type="number" class="form-control" placeholder="0">
+        </div>
+        <div class="col-6">
+             <label class="small fw-bold">Harga Beli</label>
+             <input id="prod-beli" type="number" class="form-control" placeholder="0">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <label class="small fw-bold">Stok Isi</label>
+            <input id="prod-isi" type="number" class="form-control" placeholder="0">
+        </div>
+        <div class="col">
+            <label class="small fw-bold">Stok Kosong</label>
+            <input id="prod-kosong" type="number" class="form-control" placeholder="0">
+        </div>
+    </div>
+</div>
 
   <div class="modal fade" id="modalKaryawan" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Karyawan</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
     <input type="hidden" id="kry-id">
