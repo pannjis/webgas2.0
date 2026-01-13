@@ -436,7 +436,6 @@
         <div id="page-pembelian" class="page-section d-none">
           <div class="d-flex justify-content-between mb-3">
             <h3 class="page-title">Stok Masuk (Beli)</h3>
-            <button class="btn btn-success rounded-pill" data-bs-toggle="modal" data-bs-target="#modalSupplier">+ Supplier Baru</button>
           </div>
 
           <div class="row">
@@ -444,9 +443,19 @@
               <div class="card p-4 h-100">
                 <h5 class="fw-bold mb-3 border-bottom pb-2">Input Pembelian</h5>
 
-                <div class="mb-3">
-                  <label class="fw-bold small text-muted">Pilih Supplier</label>
-                  <select id="beli-supplier" class="form-select bg-light border-0"></select>
+                <div class="mb-3 position-relative">
+                  <label class="fw-bold small text-muted">Cari Supplier</label>
+                  <div class="input-group">
+                      <span class="input-group-text bg-light border-end-0">
+                          <i class="material-icons text-muted fs-6">store</i>
+                      </span>
+                      <input type="text" id="beli-supplier" class="form-control border-start-0" placeholder="Ketik Nama Supplier..." autocomplete="off">
+                      
+                      <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modalSupplier">+</button>
+                  </div>
+
+                  <div id="hasil-cari-supplier" class="list-group position-absolute w-100 shadow d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;">
+                  </div>
                 </div>
 
                 <div class="card bg-light p-3 border-0 mb-3">
@@ -466,11 +475,11 @@
                   <div class="row mb-2">
                     <div class="col">
                       <label class="fw-bold small text-muted">Qty</label>
-                      <input type="number" id="beli-qty" class="form-control border-0" value="10" oninput="updateHargaBeli()">
+                      <input type="number" id="beli-qty" class="form-control border-0" oninput="updateHargaBeli()">
                     </div>
                     <div class="col">
                       <label class="fw-bold small text-muted">Harga Beli</label>
-                      <input type="number" id="beli-harga" class="form-control border-0">
+                      <input type="text" id="beli-harga" class="form-control border-0" onkeyup="updateHargaBeli()">
                     </div>
                   </div>
 
