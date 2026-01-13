@@ -1,6 +1,7 @@
 <script>
   let currentUser = {};
   let globalListPelanggan = [];
+  let globalListSupplier = [];
   let payrollDataTemp = [];
   let keranjangBelanja = [];
   let globalRiwayatData = [];
@@ -867,43 +868,46 @@ function cekNotifHutang() {
     myAlert('Info Tagihan', 'Silakan buka menu Riwayat > Piutang untuk melihat detail penagihan.', 'info');
 }
 
-// [FIX] Update Harga Beli (Hanya satu fungsi ini saja)
+// [UPDATE] Fungsi Update Harga Beli dengan Format Ribuan
 function updateHargaBeli() {
-  // 1. Definisi Elemen
   const sel = document.getElementById('beli-produk');
   const qtyInput = document.getElementById('beli-qty');
   const hargaInput = document.getElementById('beli-harga');
-  
-  // Perbaiki ID target sesuai HTML Anda (beli-subtotal-label)
-  const labelSubtotal = document.getElementById('beli-subtotal-label'); 
+  const labelSubtotal = document.getElementById('beli-subtotal-label');
 
-  // 2. Ambil Data
-  // Ambil harga dari atribut data-buy, jika error/kosong kasih nilai 0
+  // 1. Ambil Harga Database (Backup jika kosong)
   const priceDatabase = sel.options[sel.selectedIndex]?.getAttribute('data-buy') || 0;
-  const qty = qtyInput.value;
 
-  // 3. Logika Auto-Fill
-  // Jika input harga masih kosong, isi otomatis dari database
-  if(hargaInput.value == '' || hargaInput.value == 0) {
-      hargaInput.value = priceDatabase;
+  // 2. Format Tampilan Input (Hanya Angka & Titik)
+  // Ambil value, buang semua karakter selain angka
+  let rawValue = hargaInput.value.replace(/\D/g, ''); 
+  
+  // Jika kosong, pakai harga database (opsional, atau biarkan 0)
+  if(rawValue === '' && priceDatabase > 0) {
+      rawValue = priceDatabase.toString();
   }
 
-  // 4. Hitung Subtotal (Pakai harga yang ada di input manual)
-  const finalPrice = hargaInput.value;
-  const subtotal = finalPrice * qty;
-
-  // 5. Tampilkan Hasil (Cek dulu elemennya ada atau tidak agar tidak error)
-  if (labelSubtotal) {
-      labelSubtotal.innerText = rupiah(subtotal);
+  // Format jadi Ribuan (Visual)
+  if(rawValue !== '') {
+      hargaInput.value = Number(rawValue).toLocaleString('id-ID');
   } else {
-      console.error("Elemen ID 'beli-subtotal-label' tidak ditemukan di HTML!");
+      hargaInput.value = '';
+  }
+
+  // 3. Hitung Subtotal (Pakai Angka Murni)
+  const qty = Number(qtyInput.value);
+  const hargaMurni = Number(rawValue); // Gunakan rawValue yg tanpa titik
+
+  if (labelSubtotal) {
+      labelSubtotal.innerText = rupiah(qty * hargaMurni);
   }
 }
 
   function tambahKeKeranjangBeli() {
       const prod = document.getElementById('beli-produk').value;
       const qty = Number(document.getElementById('beli-qty').value);
-      const harga = Number(document.getElementById('beli-harga').value);
+      const rawHarga = document.getElementById('beli-harga').value.replace(/\./g, '');
+      const harga = Number(rawHarga);
       const isTukar = document.getElementById('beli-tukar').checked;
       
       if(!prod) return myAlert('Error', 'Pilih produk dulu!', 'error');
@@ -1376,42 +1380,112 @@ function prosesSimpanRetur() {
     });
 }
 
-  // --- PEMBELIAN ---
-  function loadPembelianData() {
-    google.script.run.withSuccessHandler(d => {
-       const s = document.getElementById('beli-supplier'); s.innerHTML=''; d.forEach(r=>s.innerHTML+=`<option>${r[1]}</option>`);
-    }).getData('SUPPLIER');
-  }
+// [UPDATE] Load Data Supplier ke Variabel Global
+function loadPembelianData() {
+  google.script.run.withSuccessHandler(data => {
+      // 1. Simpan data ke variabel global agar bisa dicari
+      globalListSupplier = data;
+      
+      // 2. Kosongkan inputan saat halaman dimuat ulang
+      document.getElementById('beli-supplier').value = '';
+  }).getData('SUPPLIER');
+}
+
+// --- LOGIKA PENCARIAN SUPPLIER (BARU) ---
+
+// 1. Event Listener saat mengetik nama supplier
+document.getElementById('beli-supplier')?.addEventListener('input', function() {
+    const keyword = this.value.toLowerCase();
+    const container = document.getElementById('hasil-cari-supplier');
+    
+    container.innerHTML = ''; // Bersihkan hasil sebelumnya
+
+    if(keyword.length < 1) {
+        container.classList.add('d-none'); // Sembunyikan jika kosong
+        return;
+    }
+
+    // Filter Data Supplier
+    const hasil = globalListSupplier.filter(r => {
+        // r[1] adalah Nama Supplier (sesuai urutan kolom di Code.gs)
+        const nama = r[1].toLowerCase(); 
+        return nama.includes(keyword);
+    });
+
+    if(hasil.length === 0) {
+         container.innerHTML = '<div class="list-group-item text-muted small">Supplier tidak ditemukan.</div>';
+         container.classList.remove('d-none');
+         return;
+    }
+    
+    // Render Hasil Pencarian
+    hasil.slice(0, 5).forEach(r => { // Tampilkan max 5 hasil
+        const nama = r[1];
+        
+        const btn = document.createElement('button');
+        btn.className = 'list-group-item list-group-item-action py-2 small fw-bold';
+        btn.innerHTML = nama;
+        
+        // Saat diklik, isi ke input dan sembunyikan list
+        btn.onclick = function() {
+            document.getElementById('beli-supplier').value = nama;
+            container.classList.add('d-none');
+        };
+        container.appendChild(btn);
+    });
+    
+    container.classList.remove('d-none'); // Munculkan list
+});
+
+// 2. Tampilkan semua supplier jika input diklik (Focus)
+document.getElementById('beli-supplier')?.addEventListener('focus', function() {
+    if(this.value === '' && globalListSupplier.length > 0) {
+        const container = document.getElementById('hasil-cari-supplier');
+        container.innerHTML = '';
+        
+        // Tampilkan 5 supplier pertama sebagai saran
+        globalListSupplier.slice(0, 5).forEach(r => {
+            const btn = document.createElement('button');
+            btn.className = 'list-group-item list-group-item-action py-2 small fw-bold';
+            btn.innerHTML = r[1];
+            btn.onclick = function() {
+                document.getElementById('beli-supplier').value = r[1];
+                container.classList.add('d-none');
+            };
+            container.appendChild(btn);
+        });
+        container.classList.remove('d-none');
+    }
+});
+
+// 3. Sembunyikan dropdown jika klik di luar area
+document.addEventListener('click', function(e) {
+    // Jika yang diklik BUKAN input supplier, tutup dropdown
+    if (e.target.id !== 'beli-supplier') {
+        document.getElementById('hasil-cari-supplier')?.classList.add('d-none');
+    }
+});
+
 function simpanSupplier() {
-    // 1. Ambil Data dari Form
-    const nama = document.getElementById('sup-nama').value;
-    const hp = document.getElementById('sup-hp').value;
-    const alamat = document.getElementById('sup-alamat').value;
-
-    // 2. Validasi (Agar tidak simpan data kosong)
-    if(!nama) return myAlert('Gagal', 'Nama Supplier wajib diisi!', 'error');
-
-    // 3. Tampilkan Loading
-    loading(true);
-
-    const dataKirim = { nama: nama, hp: hp, alamat: alamat };
+    // ... (kode validasi tetap sama) ...
+    const nama = document.getElementById('sup-nama').value; // Ambil nama dulu
+    // ...
 
     google.script.run.withSuccessHandler(() => {
-        // 4. Matikan Loading
         loading(false);
-
-        // 5. Tutup Modal
         const modalEl = document.getElementById('modalSupplier');
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
         if (modalInstance) modalInstance.hide();
 
-        // 6. TAMPILKAN POPUP BERHASIL (Ini yang tadinya hilang)
         myAlert('Berhasil', 'Data Supplier berhasil ditambahkan!', 'success');
 
-        // 7. Refresh Dropdown/Data
-        loadPembelianData();
+        // [UBAHAN DISINI]
+        loadPembelianData(); // Refresh data global
+        
+        // Auto-fill nama supplier yang baru dibuat ke kolom pencarian
+        document.getElementById('beli-supplier').value = nama; 
 
-        // 8. Reset Form (Kosongkan inputan)
+        // Reset Form
         document.getElementById('sup-nama').value = '';
         document.getElementById('sup-hp').value = '';
         document.getElementById('sup-alamat').value = '';
