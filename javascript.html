@@ -1,5 +1,6 @@
 <script>
   let currentUser = {};
+  let globalListPelanggan = [];
   let payrollDataTemp = [];
   let keranjangBelanja = [];
   let globalRiwayatData = [];
@@ -23,6 +24,95 @@ window.onload = function() {
       // 3. Init Modal Global
       initModal();
   };
+
+  // --- LOGIKA PENCARIAN PELANGGAN ALA GOOGLE ---
+
+// 1. Saat Mengetik di Kolom Pelanggan
+document.getElementById('kasir-pelanggan')?.addEventListener('input', function() {
+    const keyword = this.value.toLowerCase();
+    const container = document.getElementById('hasil-cari-container');
+    
+    // Bersihkan hasil lama
+    container.innerHTML = '';
+
+    // Jika kosong, sembunyikan dropdown
+    if(keyword.length < 1) {
+        container.classList.add('d-none');
+        return;
+    }
+
+    // Filter Data dari Global Variable
+    const hasil = globalListPelanggan.filter(r => {
+        const nama = r[1].toLowerCase(); // Nama Kontak
+        const pt = r[2] ? r[2].toLowerCase() : ''; // Nama Perusahaan
+        // Cari di Nama ATAU Perusahaan
+        return nama.includes(keyword) || pt.includes(keyword);
+    });
+
+    // Jika tidak ada hasil
+    if(hasil.length === 0) {
+         container.innerHTML = '<div class="list-group-item text-muted small">Data tidak ditemukan.</div>';
+         container.classList.remove('d-none');
+         return;
+    }
+    
+    // Render Hasil ke Dropdown
+    hasil.slice(0, 7).forEach(r => { // Batasi 7 saja biar dropdown tidak terlalu panjang
+        let label = r[1]; // Nama
+        let subLabel = r[2] ? r[2] : ''; // PT / Perusahaan
+        
+        // Tampilan Minimalis: Nama di Kiri, PT di Kanan (Satu Baris)
+        let display = `
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-dark text-truncate" style="font-size:13px; max-width: 65%;">${label}</span>
+                ${subLabel ? `<small class="text-muted text-end text-truncate" style="font-size:10px; max-width: 30%;">${subLabel}</small>` : ''}
+            </div>
+        `;
+        
+        // Buat Tombol Item
+        const btn = document.createElement('button');
+        // py-1 = Padding atas-bawah kecil (Ramping)
+        // px-2 = Padding kiri-kanan standar
+        btn.className = 'list-group-item list-group-item-action text-start py-1 px-2'; 
+        btn.innerHTML = display;
+        
+        // Saat Dipilih
+        btn.onclick = function() {
+            // Set Nilai Input
+            let finalVal = r[1];
+            if(r[2]) finalVal = `${r[2]} (${r[1]})`; // Format: PT (Nama)
+            
+            document.getElementById('kasir-pelanggan').value = finalVal;
+            container.classList.add('d-none'); // Sembunyikan dropdown
+        };
+
+        container.appendChild(btn);
+    });
+    
+    // Munculkan Dropdown
+    container.classList.remove('d-none');
+});
+
+// 2. Sembunyikan Dropdown jika klik di luar
+document.addEventListener('click', function(e) {
+    if (e.target.id !== 'kasir-pelanggan') {
+        document.getElementById('hasil-cari-container').classList.add('d-none');
+    }
+});
+
+// 3. Tampilkan list "Umum" jika input diklik (Opsional, seperti History)
+document.getElementById('kasir-pelanggan')?.addEventListener('focus', function() {
+    if(this.value === '') {
+        // Tampilkan saran default "Umum"
+        const container = document.getElementById('hasil-cari-container');
+        container.innerHTML = `
+            <button class="list-group-item list-group-item-action fw-bold" onclick="document.getElementById('kasir-pelanggan').value='Umum'; document.getElementById('hasil-cari-container').classList.add('d-none')">
+               Umum
+            </button>
+        `;
+        container.classList.remove('d-none');
+    }
+});
 
   function initModal() {
      if(!globalModalObj) globalModalObj = new bootstrap.Modal(document.getElementById('globalModal'));
@@ -104,18 +194,16 @@ window.onload = function() {
   }
 
 function showPage(pageId) {
-    // 1. Logika Ganti Halaman (UI) - Sembunyikan semua, munculkan yang dipilih
+    // 1. Ganti Halaman (UI Saja)
     document.querySelectorAll('.page-section').forEach(el => el.classList.add('d-none'));
     const targetPage = document.getElementById('page-' + pageId);
     if(targetPage) targetPage.classList.remove('d-none');
     
-    // 2. Update Menu Navigasi (Active State)
+    // 2. Update Navigasi Aktif
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
     const navEl = document.getElementById('nav-' + pageId);
     
-    // Khusus Submenu Riwayat (agar induknya tetap aktif jika mau)
     if(pageId === 'riwayat-jual' || pageId === 'riwayat-beli') {
-        // Opsional: Buka accordion riwayat jika tertutup
         const collapseRiwayat = document.getElementById('submenu-riwayat');
         if(collapseRiwayat && !collapseRiwayat.classList.contains('show')) {
             new bootstrap.Collapse(collapseRiwayat, { show: true });
@@ -123,40 +211,19 @@ function showPage(pageId) {
     } else {
         if(navEl) navEl.classList.add('active');
     }
-
-    // 3. LOGIKA MUAT DATA OTOMATIS (AUTO LOAD)
     
-    // A. Dashboard & Laporan
-    if(pageId === 'dashboard' || pageId === 'laporan') loadDashboard();
-    
-    // B. Produk & Kasir
-    if(pageId === 'produk' || pageId === 'kasir') {
-        loadProduk();
-        if(pageId === 'kasir') loadPelangganDropdown();
-    }
-    
-    // C. Keuangan & Pembelian
-    if(pageId === 'keuangan') loadKeuangan();
-    if(pageId === 'pembelian') loadPembelianData();
-    
-    // D. Payroll
-    if(pageId === 'payroll') switchTab('karyawan');
-    
-    // E. Pelanggan
-    if(pageId === 'pelanggan') loadPelanggan();
-
-    // --- BAGIAN PENTING: RIWAYAT AUTO LOAD & DATE ---
+    // --- PENGECUALIAN (Data Berat/Filter) ---
+    // Riwayat Transaksi tetap kita load saat diklik karena datanya bisa banyak & butuh filter tanggal
     if(pageId === 'riwayat-jual') {
-        setAutoDate('jual'); // Isi tanggal 1 s/d hari ini
-        loadRiwayatJual();   // Langsung ambil data
+        setAutoDate('jual'); 
+        loadRiwayatJual(); // Ini biarkan pakai loading(true) di dalamnya agar user tau sedang refresh
     }
-
     if(pageId === 'riwayat-beli') {
-        setAutoDate('beli'); // Isi tanggal 1 s/d hari ini
-        loadRiwayatBeli();   // Langsung ambil data
+        setAutoDate('beli'); 
+        loadRiwayatBeli(); 
     }
-
     if(pageId === 'riwayat-piutang') loadPiutang();
+    if(pageId === 'pembelian') loadPembelianData();
 }
 
 function handleLogin() {
@@ -167,28 +234,35 @@ function handleLogin() {
 
   loading(true); // Layar Putih Nyala
 
-  google.script.run
-    .withSuccessHandler(function(res) {
-        loading(false); // MATIKAN Layar Putih (Wajib di sini)
-        
-        setTimeout(function() {
+    google.script.run
+        .withSuccessHandler(function(res) {
+            
             if(res.status === 'success') {
-               currentUser = res;
-               document.getElementById('login-section').classList.add('d-none');
-               document.getElementById('main-app').classList.remove('d-none');
-               document.getElementById('display-user').innerText = res.nama;
-               showPage('dashboard');
+                currentUser = res;
+                document.getElementById('display-user').innerText = res.nama;
+                
+                // 1. PANGGIL SEMUA DATA DI SINI
+                loadSemuaDataAwal(); 
+
+                // 2. Beri waktu 1.5 detik agar data sempat terambil, baru buka aplikasi
+                // User akan melihat loading selama 1.5 detik, tapi setelah itu aplikasi NGEBUT.
+                setTimeout(function() {
+                  loading(false); // Matikan loading
+                  document.getElementById('login-section').classList.add('d-none');
+                  document.getElementById('main-app').classList.remove('d-none');
+                  showPage('dashboard');
+                }, 1500); 
+
             } else {
-               // Jika salah password, popup akan muncul SEKARANG
-               myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
+                loading(false);
+                myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
             }
-        }, 300); // Jeda 0.3 detik agar transisi mulus
-    })
-    .withFailureHandler(function(e) {
-        loading(false); // MATIKAN Layar Putih jika error
-        setTimeout(function() { myAlert('Error Server', 'Gagal terhubung: ' + e, 'error'); }, 300);
-    })
-    .loginUser(u, p);
+        })
+        .withFailureHandler(function(e) {
+            loading(false);
+            myAlert('Error Server', 'Gagal terhubung: ' + e, 'error');
+        })
+        .loginUser(u, p);
 }
   
   function logout() {
@@ -210,6 +284,20 @@ function handleLogin() {
         // 5. Matikan Loading
         loading(false);
     }, 500); // Beri jeda 0.5 detik
+}
+
+function loadSemuaDataAwal() {
+    // Kita panggil semua fungsi data di sini secara paralel
+    console.log("Memulai preload data...");
+    
+    loadDashboard();   // Update angka dashboard
+    loadProduk();      // Update stok & harga
+    loadPelanggan();   // Update list pelanggan
+    loadKeuangan();    // Update tabel kas
+    loadNotifHutang(); // Cek notifikasi hutang
+    
+    // Khusus Dropdown Pelanggan (untuk Kasir)
+    loadPelangganDropdown(); 
 }
 
   // --- DASHBOARD ---
@@ -395,14 +483,14 @@ function submitQtyPOS() {
 }
 
 // 3. TAMBAHAN: Agar bisa tekan tombol "ENTER" di keyboard saat input qty
-document.getElementById('input-qty-pos').addEventListener("keypress", function(event) {
+document.getElementById('input-qty-pos')?.addEventListener("keypress", function(event) {
   if (event.key === "Enter") {
     event.preventDefault();
     submitQtyPOS();
   }
 });
 
-// Fungsi Render Keranjang Kanan (Versi Tabel Minimalis)
+// --- UPDATE FUNGSI RENDER KERANJANG (ADA TOMBOL UBAH QTY) ---
 function renderKeranjangPOS() {
    const tbody = document.getElementById('pos-cart-body');
    const emptyMsg = document.getElementById('empty-cart-msg');
@@ -425,19 +513,32 @@ function renderKeranjangPOS() {
       grandTotal += item.total;
       totalItem += item.qty;
       
-      let badgeTipe = item.tipe.includes('Refill') ? '<span class="text-warning" style="font-size:10px">● Refill</span>' : '<span class="text-success" style="font-size:10px">● Baru</span>';
+      let badgeTipe = item.tipe.includes('Refill') ? '<span class="text-warning fw-bold" style="font-size:10px">● Refill</span>' : '<span class="text-success fw-bold" style="font-size:10px">● Baru</span>';
 
       tbody.innerHTML += `
       <tr>
-         <td class="ps-4">
-            <div class="fw-bold text-dark" style="font-size: 14px;">${item.produkNama}</div>
-            ${badgeTipe}
-            <div class="text-muted small">${rupiah(item.hargaSatuan)} x ${item.qty}</div>
+         <td class="ps-3 py-3" style="width: 65%;">
+            <div class="fw-bold text-dark mb-1 text-truncate" style="max-width:150px; font-size: 13px;">${item.produkNama}</div>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                ${badgeTipe}
+                <small class="text-muted" style="font-size:10px;">@${rupiah(item.hargaSatuan)}</small>
+            </div>
+            
+            <div class="input-group input-group-sm" style="width: 100px;">
+                <button class="btn btn-outline-secondary px-2 py-0 d-flex align-items-center justify-content-center" type="button" onclick="ubahQty(${index}, -1)" style="height:26px;">
+                    <i class="material-icons" style="font-size:14px">remove</i>
+                </button>
+                <input type="text" class="form-control text-center px-0 py-0 fw-bold bg-white border-secondary" value="${item.qty}" readonly style="font-size:13px; height: 26px; border-left:0; border-right:0;">
+                <button class="btn btn-outline-primary px-2 py-0 d-flex align-items-center justify-content-center" type="button" onclick="ubahQty(${index}, 1)" style="height:26px;">
+                    <i class="material-icons" style="font-size:14px">add</i>
+                </button>
+            </div>
          </td>
-         <td class="text-end pe-3">
-            <div class="fw-bold mb-1">${rupiah(item.total)}</div>
-            <button class="btn btn-sm btn-light text-danger py-0 px-2 border" onclick="hapusItemKeranjang(${index}); renderKeranjangPOS();">
-               <i class="material-icons" style="font-size:14px">close</i>
+         <td class="text-end pe-3 py-3 align-top">
+            <div class="fw-bold text-dark mb-2" style="font-size:13px;">${rupiah(item.total)}</div>
+            
+            <button class="btn btn-sm btn-light text-danger border-0 p-1 rounded-circle shadow-sm" onclick="hapusItemKeranjang(${index}); renderKeranjangPOS();" title="Hapus Item">
+               <i class="material-icons" style="font-size:18px">delete</i>
             </button>
          </td>
       </tr>
@@ -447,6 +548,40 @@ function renderKeranjangPOS() {
    document.getElementById('pos-subtotal').innerText = rupiah(grandTotal);
    document.getElementById('pos-grand-total').innerText = rupiah(grandTotal);
    document.getElementById('cart-count-badge').innerText = totalItem + ' Item';
+}
+
+// --- FUNGSI BARU: LOGIKA TAMBAH/KURANG QTY ---
+function ubahQty(index, delta) {
+    const item = keranjangBelanja[index];
+    
+    // 1. Logika Pengurangan (Jika 1 dikurang -> Konfirmasi Hapus)
+    if(delta < 0 && item.qty === 1) {
+        // Hapus langsung atau tanya dulu (opsional), di sini kita hapus langsung biar cepat
+        keranjangBelanja.splice(index, 1);
+        renderKeranjangPOS();
+        return; 
+    }
+
+    // 2. Logika Penambahan (Cek Stok Dulu)
+    if(delta > 0) {
+        // Cari data produk asli di database lokal
+        const produkDb = globalProdukList.find(p => p[1] === item.produkNama);
+        if(produkDb) {
+             const stokMax = Number(produkDb[4]); // Index 4 = Stok Isi
+             
+             // Hitung total qty item ini di keranjang 
+             if(item.qty + delta > stokMax) {
+                 return myAlert('Stok Terbatas', `Sisa stok gudang hanya ${stokMax}`, 'warning');
+             }
+        }
+    }
+
+    // 3. Update Angka
+    item.qty += delta;
+    item.total = item.qty * item.hargaSatuan; // Hitung ulang total harga
+    
+    // 4. Render Ulang Tampilan
+    renderKeranjangPOS(); 
 }
 
 // Fungsi Pencarian Grid
@@ -575,82 +710,101 @@ function hapusProduk(n) {
 
 function prosesBayarFinal() {
     if(keranjangBelanja.length === 0) return myAlert('Keranjang Kosong', 'Belum ada barang yang diinput.', 'error');
-    
-    // Cek Tabung Kosong
-    let butuhTabungKosong = 0;
-    keranjangBelanja.forEach(k => { if(k.tipe === 'Tukar (Refill)') butuhTabungKosong += k.qty; });
 
-const eksekusiBayar = () => {
-    // PERBAIKAN: Gunakan ID 'pos-grand-total' yang sesuai dengan HTML
+    // 1. Cek Apakah ada Refill?
+    let butuhTabungKosong = 0;
+    keranjangBelanja.forEach(k => { 
+        if(k.tipe === 'Tukar (Refill)') butuhTabungKosong += k.qty; 
+    });
+
+    // 2. JIKA ADA REFILL -> BUKA MODAL CEK FISIK (GATEKEEPER)
+    if(butuhTabungKosong > 0) {
+        // Reset Inputan
+        document.getElementById('lbl-qty-refill').innerText = butuhTabungKosong;
+        document.getElementById('input-fisik-tabung').value = ''; 
+        document.getElementById('msg-error-tabung').classList.add('d-none');
+        
+        // Buka Modal
+        new bootstrap.Modal(document.getElementById('modalCekTabung')).show();
+        
+        // Auto Focus ke input agar kasir langsung ketik
+        setTimeout(() => document.getElementById('input-fisik-tabung').focus(), 500);
+        
+    } else {
+        // 3. JIKA TIDAK ADA REFILL (BELI BARU SEMUA) -> LANGSUNG EKSEKUSI
+        eksekusiBayarUtama();
+    }
+}
+
+// Fungsi dipanggil saat tombol LANJUT BAYAR di modal diklik
+function validasiTabung() {
+    // 1. Ambil Angka Target & Inputan
+    let target = Number(document.getElementById('lbl-qty-refill').innerText);
+    let input = Number(document.getElementById('input-fisik-tabung').value);
+    
+    // 2. VALIDASI KERAS (HARD BLOCK)
+    if(input !== target) {
+        // Jika angka beda, munculkan error dan JANGAN LANJUT
+        const elMsg = document.getElementById('msg-error-tabung');
+        elMsg.classList.remove('d-none');
+        
+        // Mainkan animasi getar (optional, visual feedback)
+        document.getElementById('input-fisik-tabung').classList.add('is-invalid');
+        return; 
+    }
+
+    // 3. Jika Cocok, Tutup Modal & Lanjut Bayar
+    bootstrap.Modal.getInstance(document.getElementById('modalCekTabung')).hide();
+    eksekusiBayarUtama();
+}
+
+// Tambahan: Supaya bisa Enter di input tabung
+document.getElementById('input-fisik-tabung')?.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') validasiTabung();
+});
+
+// --- INI LOGIKA PEMBAYARAN UTAMA (YANG TADINYA ADA DI DALAM PROSESBAYARFINAL) ---
+// Kita pisahkan jadi fungsi sendiri agar bisa dipanggil dari dua tempat
+function eksekusiBayarUtama() {
     const totalBayarStr = document.getElementById('pos-grand-total').innerText; 
     
-    myConfirm('Konfirmasi Pembayaran', `Total Transaksi: ${totalBayarStr}\n\nSimpan data ini?`, () => {
-            
-            // AMBIL METODE PEMBAYARAN DARI HTML
-            // AMBIL DATA
-                const metodeDipilih = document.getElementById('pos-metode-bayar').value;
-                const tglJatuhTempo = document.getElementById('pos-jatuh-tempo').value; // Ambil tanggal
+    const metodeDipilih = document.getElementById('pos-metode-bayar').value;
+    const pelangganDipilih = document.getElementById('kasir-pelanggan').value;
+    const tglJatuhTempo = document.getElementById('pos-jatuh-tempo').value;
 
-                // Validasi Hutang Wajib Isi Tanggal
-                if(metodeDipilih === 'Hutang' && !tglJatuhTempo) {
-                    return myAlert('Error', 'Untuk Hutang, Tanggal Jatuh Tempo wajib diisi!', 'warning');
-                }
+    // Validasi Pelanggan
+    if (!pelangganDipilih || pelangganDipilih === "") {
+        return myAlert('Pilih Pelanggan', 'Anda belum memilih pelanggan.\nSilakan pilih "Umum" atau nama pelanggan lain.', 'warning');
+    }
 
-                const payload = {
-                    pelanggan: document.getElementById('kasir-pelanggan').value,
-                    kasir: currentUser.nama || 'Admin',
-                    metode: metodeDipilih,
-                    jatuhTempo: (metodeDipilih === 'Hutang') ? tglJatuhTempo : '', // Kirim tanggal
-                    items: keranjangBelanja
-                };
+    if(metodeDipilih === 'Hutang') {
+        if(pelangganDipilih === 'Umum') return myAlert('Data Belum Lengkap', 'Hutang tidak boleh akun Umum.', 'warning');
+        if(!tglJatuhTempo) return myAlert('Data Belum Lengkap', 'Isi tanggal jatuh tempo.', 'warning');
+    }
 
-            loading(true);
+    // Konfirmasi Akhir (Total Uang)
+    myConfirm('Konfirmasi Pembayaran', `Total Transaksi: ${totalBayarStr}\nMetode: ${metodeDipilih}\n\nSimpan data ini?`, () => {
+        const payload = {
+            pelanggan: pelangganDipilih,
+            kasir: currentUser.nama || 'Admin',
+            metode: metodeDipilih,
+            jatuhTempo: (metodeDipilih === 'Hutang') ? tglJatuhTempo : '', 
+            items: keranjangBelanja
+        };
+
+        loading(true);
         google.script.run.withSuccessHandler(res => {
            loading(false);
-           
-           // 1. Tampilkan Popup Berhasil (Kecil/Toast) - Opsional
-           // myAlert('Berhasil', res, 'success'); <--- Bisa dimatikan agar langsung invoice
-
-           // 2. SIAPKAN DATA UNTUK INVOICE
-           // Kita gunakan ID sementara (Timestamp) agar cepat, atau ambil dari response jika backend mengirim ID
            const idTrxSementara = 'TRX-' + Date.now(); 
-           
            tampilkanInvoice(payload, idTrxSementara);
-
-           // 3. RESET DROPDOWN PELANGGAN KE DEFAULT
-           const dropdown = document.getElementById('kasir-pelanggan');
-           dropdown.value = ""; // Reset ke value kosong (Pilih Pelanggan)
-           
-           // Note: resetKeranjang() dipindah ke tombol "Tutup" invoice 
-           // agar data keranjang tidak hilang saat invoice masih tampil.
-           
+           document.getElementById('kasir-pelanggan').value = ""; 
            loadProduk(); 
         }).withFailureHandler(err => {
            loading(false);
            myAlert('Gagal', err.message, 'error');
         }).simpanTransaksiBulk(payload);
-
     });
-};
-
-    // --- LOGIC PENGECEKAN TABUNG ---
-    if(butuhTabungKosong > 0) {
-       // Konfirmasi Pertama: Tabung Kosong
-       myConfirm('Cek Fisik Tabung', `Transaksi ini ada Refill.\nApakah Anda sudah menerima ${butuhTabungKosong} Tabung Kosong dari pelanggan?`, () => {
-           
-           // --- PERBAIKAN DI SINI: PAKAI SETTIMEOUT ---
-           // Beri jeda 500ms (0.5 detik) agar modal pertama nutup dulu dengan mulus
-           setTimeout(() => {
-               eksekusiBayar();
-           }, 500); 
-           // -------------------------------------------
-
-       });
-    } else {
-       // Jika tidak butuh tabung, langsung bayar
-       eksekusiBayar();
-    }
-  }
+}
 
   function loadNotifHutang() {
     google.script.run.withSuccessHandler(jumlah => {
@@ -1308,32 +1462,49 @@ function hapusPelanggan(id) {
 function loadPelangganDropdown(targetNama = null) {
     google.script.run.withSuccessHandler(data => {
        if (!data) return; 
-
-       const sel = document.getElementById('kasir-pelanggan');
-       sel.innerHTML = '<option value="" disabled selected>- Pilih Pelanggan -</option><option value="Umum">Umum</option>';
        
-       let valueToSelect = null;
-       data.forEach(r => {
-          let label = r[1]; 
-          if(r[2]) label = `${r[2]} (${r[1]})`; 
-          sel.innerHTML += `<option value="${label}">${label}</option>`;
-          if(targetNama && r[1] === targetNama) valueToSelect = label;
-       });
-
-       if(valueToSelect) sel.value = valueToSelect;
-
+       // 1. Simpan Data ke Global Variable
+       globalListPelanggan = data; 
+       
+       // 2. Jika ada target (misal baru tambah pelanggan), langsung set ke input
+       if(targetNama) {
+           document.getElementById('kasir-pelanggan').value = targetNama;
+       }
     }).getListPelanggan();
 }
 
-  // --- KEUANGAN ---
-  function loadKeuangan() {
-    loading(true);
+function loadKeuangan() {
+    
     google.script.run.withSuccessHandler(d => {
-      loading(false);
-      const tb = document.querySelector('#tabel-keuangan tbody'); tb.innerHTML='';
-      d.reverse().slice(0,10).forEach(r => tb.innerHTML+=`<tr><td>${new Date(r[1]).toLocaleDateString()}</td><td>${r[2]}</td><td>${r[3]}</td><td>${rupiah(r[4])}</td><td>${r[5]}</td></tr>`);
+      
+      const tb = document.querySelector('#tabel-keuangan tbody'); 
+      tb.innerHTML='';
+
+      // --- [PERBAIKAN] PENGAMAN DATA KOSONG ---
+      if (!d || d.length === 0) {
+          tb.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada data keuangan.</td></tr>';
+          return; // Stop di sini agar tidak lanjut ke .reverse()
+      }
+      // ----------------------------------------
+
+      // Render Data (Hanya jalan jika data ADA)
+      d.reverse().slice(0,10).forEach(r => {
+          let tgl = r[1];
+          try { tgl = new Date(r[1]).toLocaleDateString(); } catch(e){}
+
+          tb.innerHTML += `
+            <tr>
+                <td>${tgl}</td>
+                <td>${r[2]}</td>
+                <td>${r[3]}</td>
+                <td>${rupiah(r[4])}</td>
+                <td>${r[5]}</td>
+            </tr>`;
+      });
+
     }).getData('KEUANGAN');
   }
+
   function bukaModalKeuangan() {
     new bootstrap.Modal(document.getElementById('modalKeuangan')).show();
     google.script.run.withSuccessHandler(c => { const s=document.getElementById('keu-kategori'); s.innerHTML=''; c.forEach(x=>s.innerHTML+=`<option>${x}</option>`); }).getKategori();
@@ -1530,33 +1701,151 @@ function filterTabelPiutang() {
 }
 
 function tampilkanInvoice(dataPayload, idTrx) {
-    // 1. Isi Data Header
-    document.getElementById('inv-no').innerText = idTrx;
-    document.getElementById('inv-date').innerText = new Date().toLocaleString('id-ID');
-    document.getElementById('inv-pelanggan').innerText = dataPayload.pelanggan;
-    document.getElementById('inv-kasir').innerText = dataPayload.kasir;
-    document.getElementById('inv-metode').innerText = "Metode Bayar: " + dataPayload.metode;
+    const tglSekarang = new Date().toLocaleString('id-ID');
+    const areaCetak = document.getElementById('area-cetak');
+    
+    // --- 1. LOGIKA JATUH TEMPO ---
+    let infoMetode = `Metode Bayar: ${dataPayload.metode}`;
+    if(dataPayload.metode === 'Hutang' && dataPayload.jatuhTempo) {
+        const dateObj = new Date(dataPayload.jatuhTempo);
+        const tglIndo = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        const today = new Date(); today.setHours(0,0,0,0); dateObj.setHours(0,0,0,0);
+        const diffDays = Math.ceil((dateObj - today) / (1000 * 60 * 60 * 24));
+        
+        infoMetode = `
+           Metode: <b>HUTANG</b><br>
+           <div class="mt-1" style="border: 1px dashed red; padding: 2px 5px; display:inline-block;">
+               <span class="text-danger fw-bold" style="font-size: 10pt;">
+                   JATUH TEMPO: ${tglIndo}<br>(Waktu: ${diffDays} Hari Lagi)
+               </span>
+           </div>`;
+    }
 
-    // 2. Isi Tabel Barang
-    const tbody = document.getElementById('inv-items-body');
-    tbody.innerHTML = '';
+    // --- 2. GENERATE BARIS BARANG ---
+    let rowsInvoice = '';
+    let rowsSuratJalan = '';
     let grandTotal = 0;
 
     dataPayload.items.forEach(item => {
         grandTotal += item.total;
-        tbody.innerHTML += `
+        
+        // Invoice (Ada Harga)
+        rowsInvoice += `
             <tr>
                 <td class="text-start">${item.produkNama}<br><small class="text-muted fst-italic">${item.tipe}</small></td>
                 <td>${rupiah(item.hargaSatuan)}</td>
                 <td>${item.qty}</td>
                 <td class="text-end fw-bold">${rupiah(item.total)}</td>
-            </tr>
-        `;
+            </tr>`;
+            
+        // Surat Jalan (Tanpa Harga)
+        rowsSuratJalan += `
+            <tr>
+                <td class="text-start">${item.produkNama}<br><small class="text-muted fst-italic">${item.tipe}</small></td>
+                <td class="fw-bold fs-5">${item.qty}</td>
+                <td class="text-center" style="width: 50px; border: 1px solid #000;"></td> 
+            </tr>`;
     });
 
-    document.getElementById('inv-grand-total').innerText = rupiah(grandTotal);
+    // --- 3. HEADER PERUSAHAAN ---
+    const headerPT = `
+         <div class="d-flex justify-content-between border-bottom border-2 border-dark pb-2 mb-2">
+             <div>
+                 <h4 class="fw-bold text-danger m-0">PT. PANJI ALAM JAYA</h4>
+                 <small class="text-muted fw-bold" style="font-size:9pt">DISTRIBUTOR GAS & PUPUK</small><br>
+                 <small class="text-muted" style="font-size:8pt">Jl. Raya Provinsi (Sesuaikan Alamat)</small>
+             </div>
+             <div class="text-end">
+                 <h4 class="fw-bold text-dark" id="judul-dokumen">INVOICE</h4>
+                 <div style="font-size:9pt">${tglSekarang}</div>
+                 <div class="text-danger fw-bold" style="font-size:10pt">${idTrx}</div>
+             </div>
+         </div>`;
 
-    // 3. Tampilkan Modal
+    // --- 4. HALAMAN 1: INVOICE (DENGAN TTD PELANGGAN) ---
+    // Perhatikan bagian footer di bawah ini sudah saya ubah jadi 3 kolom
+    const htmlInvoice = `
+      <div class="h-100">
+         ${headerPT}
+         <div class="row mb-2" style="font-size:10pt">
+             <div class="col-6">
+                 <small class="text-muted fw-bold">KEPADA YTH:</small><br>
+                 <strong class="text-dark fs-6">${dataPayload.pelanggan}</strong><br>
+                 <small>${infoMetode}</small>
+             </div>
+             <div class="col-6 text-end">
+                 <small class="text-muted fw-bold">KASIR:</small><br>
+                 <strong>${dataPayload.kasir}</strong>
+             </div>
+         </div>
+
+         <table class="table table-bordered border-dark mb-0 table-sm" style="border-color: #000 !important; font-size:10pt;">
+             <thead class="bg-light text-center">
+                 <tr><th>Nama Barang</th><th>Harga</th><th>Qty</th><th>Total</th></tr>
+             </thead>
+             <tbody class="text-center">${rowsInvoice}</tbody>
+             <tfoot class="fw-bold">
+                 <tr><td colspan="3" class="text-end pe-2">GRAND TOTAL</td><td class="text-end bg-light">${rupiah(grandTotal)}</td></tr>
+             </tfoot>
+         </table>
+         
+         <div class="row mt-4 align-items-end" style="page-break-inside: avoid;">
+            <div class="col-4">
+                <small class="fst-italic text-muted" style="font-size:8pt">
+                   * Pembayaran sah jika disertai tanda tangan/stempel.<br>
+                   * Komplain maksimal 1x24 jam.
+                </small>
+            </div>
+            <div class="col-4 text-center">
+                <small>Tanda Terima,</small>
+                <br><br><br>
+                <small class="fw-bold text-uppercase">( ${dataPayload.pelanggan} )</small>
+            </div>
+            <div class="col-4 text-center">
+                <small>Hormat Kami,</small>
+                <br><br><br>
+                <small class="fw-bold text-uppercase">( ${dataPayload.kasir} )</small>
+            </div>
+         </div>
+      </div>
+    `;
+
+    // --- 5. HALAMAN 2: SURAT JALAN (TETAP SAMA) ---
+    const headerSJ = headerPT.replace('INVOICE', 'SURAT JALAN'); 
+    const htmlSuratJalan = `
+      <div class="h-100">
+         ${headerSJ}
+         <div class="alert alert-secondary p-1 mb-2 text-center fw-bold" style="font-size:10pt; border:1px solid #999;">
+             DOKUMEN GUDANG / PENGIRIMAN
+         </div>
+         
+         <div class="row mb-2" style="font-size:10pt">
+             <div class="col-6">
+                 <small class="text-muted fw-bold">TUJUAN:</small><br>
+                 <strong class="text-dark fs-6">${dataPayload.pelanggan}</strong>
+             </div>
+             <div class="col-6 text-end">
+                 <small class="text-muted fw-bold">GUDANG:</small><br>
+                 <strong>________________</strong>
+             </div>
+         </div>
+
+         <table class="table table-bordered border-dark mb-0 table-sm" style="border-color: #000 !important; font-size:10pt;">
+             <thead class="bg-light text-center">
+                 <tr><th>Nama Barang / Deskripsi</th><th>Qty (Fisik)</th><th>Cek</th></tr>
+             </thead>
+             <tbody class="text-center align-middle">${rowsSuratJalan}</tbody>
+         </table>
+
+         <div class="row mt-4 text-center" style="page-break-inside: avoid;">
+            <div class="col-4"><small>Penerima,</small><br><br><br><br><small>( ....................... )</small></div>
+            <div class="col-4"><small>Supir / Kurir,</small><br><br><br><br><small>( ....................... )</small></div>
+            <div class="col-4"><small>Kepala Gudang,</small><br><br><br><br><small>( ....................... )</small></div>
+         </div>
+      </div>
+    `;
+
+    areaCetak.innerHTML = htmlInvoice + '<div class="page-break"></div>' + htmlSuratJalan;
     new bootstrap.Modal(document.getElementById('modalInvoice')).show();
 }
 
@@ -1564,23 +1853,4 @@ function tutupInvoice() {
     // Saat invoice ditutup, baru reset keranjang
     resetKeranjang(); 
 }
-
-function updateTime() {
-            const now = new Date();
-            // Format: DD/MM/YYYY, HH.mm.ss
-            const dateStr = now.toLocaleDateString('id-ID'); // 13/1/2026
-            const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/:/g, '.');
-            
-            document.getElementById('invoice-date').innerText = `${dateStr}, ${timeStr}`;
-        }
-
-        // 2. Fungsi membuat No Transaksi Acak (Dummy Dinamis)
-        function generateTrx() {
-            const randomId = Math.floor(Date.now() + Math.random());
-            document.getElementById('invoice-trx').innerText = 'TRX-' + randomId;
-        }
-
-        // Jalankan fungsi saat halaman dibuka
-        updateTime();
-        generateTrx();
 </script>
