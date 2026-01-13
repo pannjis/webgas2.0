@@ -270,4 +270,103 @@
   background-color: #9ca3af; /* Warna saat di-hover */
 }
 
+/* --- BUTTON ANIMASI (TOMBOL +) --- */
+.btn-animate-bounce {
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efek Membal */
+  font-weight: bold;
+  font-size: 1.2rem;
+  line-height: 0;
+  width: 45px; /* Lebar lebih luas agar mudah ditekan */
+  border-radius: 0 8px 8px 0; /* Sudut tumpul di kanan */
+}
+
+/* Saat Mouse Diarahkan (Hover) */
+.btn-animate-bounce:hover {
+  background-color: #0d6efd !important; /* Biru Utama */
+  color: white !important;
+  transform: scale(1.1); /* Membesar sedikit */
+  z-index: 10;
+  box-shadow: 0 4px 10px rgba(13, 110, 253, 0.3);
+}
+
+/* Saat Ditekan (Klik) */
+.btn-animate-bounce:active {
+  transform: scale(0.9); /* Mengecil (Efek Per/Pegas) */
+  background-color: #0a58ca !important;
+}
+
+/* --- PRINT STYLE (AGAR TAMPILAN INVOICE RAPI SAAT DI-PRINT) --- */
+@media print {
+  body * {
+    visibility: hidden; /* Sembunyikan semua website */
+  }
+  #modalInvoice, #modalInvoice * {
+    visibility: visible; /* Munculkan HANYA Invoice */
+  }
+  #modalInvoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important; /* Sembunyikan tombol tutup/cetak di kertas */
+  }
+  .modal-backdrop {
+    display: none !important; /* Hilangkan latar hitam */
+  }
+}
+
+/* Style umum untuk tampilan di layar (opsional, sesuaikan dengan yang sudah ada) */
+  .invoice-box {
+      max-width: 800px;
+      margin: auto;
+      padding: 30px;
+      border: 1px solid #eee;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+      font-size: 14px;
+      line-height: 24px;
+      font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif;
+      color: #555;
+  }
+
+  /* --- PENTING: PENGATURAN KHUSUS PRINT --- */
+  @media print {
+      /* Mengatur ukuran kertas menjadi A5 Landscape */
+      @page {
+          size: A5 landscape; 
+          margin: 10mm; /* Margin tepi kertas */
+      }
+
+      body {
+          margin: 0;
+          padding: 0;
+          background-color: white;
+      }
+
+      /* Memastikan konten memenuhi lebar kertas */
+      .invoice-box {
+          width: 100%; 
+          max-width: none; /* Hilangkan batas lebar */
+          margin: 0;
+          padding: 0;
+          border: none; /* Hilangkan border kotak saat print */
+          box-shadow: none; /* Hilangkan bayangan saat print */
+          position: absolute;
+          top: 0;
+          left: 0;
+      }
+      
+      /* Opsional: Perkecil sedikit font agar muat vertikal karena A5 landscape itu pendek */
+      .invoice-box table, .invoice-box p, .invoice-box h1 {
+          font-size: 12px; 
+      }
+      
+      /* Sembunyikan elemen yang tidak perlu dicetak (misal tombol print/tutup) */
+      .no-print {
+          display: none;
+      }
+  }
 </style>
