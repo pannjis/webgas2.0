@@ -25,43 +25,85 @@ window.onload = function() {
       initModal();
   };
 
-  // --- LOGIKA PENCARIAN PELANGGAN ALA GOOGLE ---
+// --- LOGIKA PENCARIAN PELANGGAN ALA GOOGLE (UPDATE) ---
 
-// 1. Saat Mengetik di Kolom Pelanggan
+// 1. Fungsi Helper: Tampilkan Menu Default (Umum + 5 Pelanggan)
+function tampilkanMenuDefault() {
+    const container = document.getElementById('hasil-cari-container');
+    container.innerHTML = ''; 
+
+    // A. Opsi "Umum" (Paling Atas)
+    const btnUmum = document.createElement('button');
+    btnUmum.className = 'list-group-item list-group-item-action fw-bold text-primary py-2';
+    btnUmum.innerHTML = 'Umum (Default)';
+    btnUmum.onclick = function() {
+            document.getElementById('kasir-pelanggan').value = 'Umum';
+            container.classList.add('d-none');
+    };
+    container.appendChild(btnUmum);
+
+    // B. Tambahkan 5 Pelanggan Teratas dari Database
+    if(globalListPelanggan && globalListPelanggan.length > 0) {
+        globalListPelanggan.slice(0, 5).forEach(r => {
+            let label = r[1]; // Nama Kontak
+            let subLabel = r[2] ? r[2] : ''; // Nama Perusahaan
+
+            let display = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark text-truncate" style="font-size:13px; max-width: 65%;">${label}</span>
+                    ${subLabel ? `<small class="text-muted text-end text-truncate" style="font-size:10px; max-width: 30%;">${subLabel}</small>` : ''}
+                </div>
+            `;
+
+            const btn = document.createElement('button');
+            btn.className = 'list-group-item list-group-item-action text-start py-1 px-2';
+            btn.innerHTML = display;
+            
+            btn.onclick = function() {
+                let finalVal = r[1];
+                if(r[2]) finalVal = `${r[2]} (${r[1]})`;
+                document.getElementById('kasir-pelanggan').value = finalVal;
+                container.classList.add('d-none');
+            };
+            container.appendChild(btn);
+        });
+    }
+    container.classList.remove('d-none'); // Pastikan muncul
+}
+
+// 2. Saat Mengetik / Hapus Teks (Input Event)
 document.getElementById('kasir-pelanggan')?.addEventListener('input', function() {
     const keyword = this.value.toLowerCase();
     const container = document.getElementById('hasil-cari-container');
     
-    // Bersihkan hasil lama
-    container.innerHTML = '';
-
-    // Jika kosong, sembunyikan dropdown
+    // --- [PERUBAHAN UTAMA DI SINI] ---
+    // Jika input jadi kosong (dihapus), panggil menu default lagi
     if(keyword.length < 1) {
-        container.classList.add('d-none');
-        return;
+        tampilkanMenuDefault(); 
+        return; 
     }
+    // ---------------------------------
 
-    // Filter Data dari Global Variable
+    // Jika ada teks, lakukan pencarian seperti biasa
+    container.innerHTML = ''; // Bersihkan default
+
     const hasil = globalListPelanggan.filter(r => {
-        const nama = r[1].toLowerCase(); // Nama Kontak
-        const pt = r[2] ? r[2].toLowerCase() : ''; // Nama Perusahaan
-        // Cari di Nama ATAU Perusahaan
+        const nama = r[1].toLowerCase();
+        const pt = r[2] ? r[2].toLowerCase() : '';
         return nama.includes(keyword) || pt.includes(keyword);
     });
 
-    // Jika tidak ada hasil
     if(hasil.length === 0) {
          container.innerHTML = '<div class="list-group-item text-muted small">Data tidak ditemukan.</div>';
          container.classList.remove('d-none');
          return;
     }
     
-    // Render Hasil ke Dropdown
-    hasil.slice(0, 7).forEach(r => { // Batasi 7 saja biar dropdown tidak terlalu panjang
-        let label = r[1]; // Nama
-        let subLabel = r[2] ? r[2] : ''; // PT / Perusahaan
+    // Render Hasil Pencarian (Maks 7)
+    hasil.slice(0, 7).forEach(r => {
+        let label = r[1];
+        let subLabel = r[2] ? r[2] : '';
         
-        // Tampilan Minimalis: Nama di Kiri, PT di Kanan (Satu Baris)
         let display = `
             <div class="d-flex justify-content-between align-items-center">
                 <span class="fw-bold text-dark text-truncate" style="font-size:13px; max-width: 65%;">${label}</span>
@@ -69,48 +111,33 @@ document.getElementById('kasir-pelanggan')?.addEventListener('input', function()
             </div>
         `;
         
-        // Buat Tombol Item
         const btn = document.createElement('button');
-        // py-1 = Padding atas-bawah kecil (Ramping)
-        // px-2 = Padding kiri-kanan standar
-        btn.className = 'list-group-item list-group-item-action text-start py-1 px-2'; 
+        btn.className = 'list-group-item list-group-item-action text-start py-1 px-2';
         btn.innerHTML = display;
         
-        // Saat Dipilih
         btn.onclick = function() {
-            // Set Nilai Input
             let finalVal = r[1];
-            if(r[2]) finalVal = `${r[2]} (${r[1]})`; // Format: PT (Nama)
-            
+            if(r[2]) finalVal = `${r[2]} (${r[1]})`;
             document.getElementById('kasir-pelanggan').value = finalVal;
-            container.classList.add('d-none'); // Sembunyikan dropdown
+            container.classList.add('d-none');
         };
-
         container.appendChild(btn);
     });
     
-    // Munculkan Dropdown
     container.classList.remove('d-none');
 });
 
-// 2. Sembunyikan Dropdown jika klik di luar
-document.addEventListener('click', function(e) {
-    if (e.target.id !== 'kasir-pelanggan') {
-        document.getElementById('hasil-cari-container').classList.add('d-none');
+// 3. Saat Field Diklik (Focus) - Tampilkan Default
+document.getElementById('kasir-pelanggan')?.addEventListener('focus', function() {
+    if(this.value === '') {
+        tampilkanMenuDefault();
     }
 });
 
-// 3. Tampilkan list "Umum" jika input diklik (Opsional, seperti History)
-document.getElementById('kasir-pelanggan')?.addEventListener('focus', function() {
-    if(this.value === '') {
-        // Tampilkan saran default "Umum"
-        const container = document.getElementById('hasil-cari-container');
-        container.innerHTML = `
-            <button class="list-group-item list-group-item-action fw-bold" onclick="document.getElementById('kasir-pelanggan').value='Umum'; document.getElementById('hasil-cari-container').classList.add('d-none')">
-               Umum
-            </button>
-        `;
-        container.classList.remove('d-none');
+// 4. Sembunyikan Dropdown jika klik di luar
+document.addEventListener('click', function(e) {
+    if (e.target.id !== 'kasir-pelanggan') {
+        document.getElementById('hasil-cari-container').classList.add('d-none');
     }
 });
 
@@ -761,6 +788,11 @@ function validasiTabung() {
 // Tambahan: Supaya bisa Enter di input tabung
 document.getElementById('input-fisik-tabung')?.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') validasiTabung();
+});
+// TAMBAHAN: Reset Error saat user mulai mengetik ulang
+document.getElementById('input-fisik-tabung')?.addEventListener('input', function() {
+    this.classList.remove('is-invalid'); // Hilangkan border merah
+    document.getElementById('msg-error-tabung').classList.add('d-none'); // Sembunyikan pesan error
 });
 
 // --- INI LOGIKA PEMBAYARAN UTAMA (YANG TADINYA ADA DI DALAM PROSESBAYARFINAL) ---
@@ -1588,7 +1620,7 @@ function setAutoDate(tipe) {
 }
 
 // Listener untuk Metode Bayar
-document.getElementById('pos-metode-bayar').addEventListener('change', function() {
+document.getElementById('pos-metode-bayar')?.addEventListener('change', function() {
     const val = this.value;
     const box = document.getElementById('box-jatuh-tempo');
     
