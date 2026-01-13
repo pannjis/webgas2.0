@@ -642,22 +642,31 @@ function simpanProduk() {
     };
 
     // Fungsi untuk mengirim data ke Google Script
-    const kirimData = (finalData) => {
-        loading(true);
-        google.script.run.withSuccessHandler(() => { 
-            loading(false);
-            document.getElementById('loading-upload')?.classList.add('d-none');
-            
-            // [TAMBAHAN] Reset Preview & Input File
-            document.getElementById('img-preview').classList.add('d-none');
-            document.getElementById('img-preview').src = '';
-            
-            bootstrap.Modal.getInstance(document.getElementById('modalProduk')).hide(); 
-            loadProduk(); 
-            document.querySelectorAll('#modalProduk input').forEach(i => i.value = '');
-        }).tambahProduk(dataForm);
-    };
+        const kirimData = (finalData) => {
+            loading(true); // Nyalakan loading
+            google.script.run.withSuccessHandler(() => { 
+                loading(false); // Matikan loading
+                document.getElementById('loading-upload')?.classList.add('d-none');
+                
+                // Reset Preview & Input File
+                document.getElementById('img-preview').classList.add('d-none');
+                document.getElementById('img-preview').src = '';
+                
+                // Tutup Modal
+                bootstrap.Modal.getInstance(document.getElementById('modalProduk')).hide(); 
+                
+                // Refresh Tabel
+                loadProduk(); 
+                
+                // Reset Form
+                document.querySelectorAll('#modalProduk input').forEach(i => i.value = '');
 
+                // --- TAMBAHKAN INI AGAR MUNCUL POPUP ---
+                myAlert('Sukses', 'Produk berhasil disimpan ke database!', 'success');
+
+            }).tambahProduk(finalData);
+        };
+        
     // LOGIKA UPLOAD GAMBAR
     if (file) {
         // Validasi ukuran (misal maks 2MB agar tidak berat)
@@ -1373,16 +1382,43 @@ function prosesSimpanRetur() {
        const s = document.getElementById('beli-supplier'); s.innerHTML=''; d.forEach(r=>s.innerHTML+=`<option>${r[1]}</option>`);
     }).getData('SUPPLIER');
   }
-  function simpanSupplier() {
-    google.script.run.withSuccessHandler(()=>{ bootstrap.Modal.getInstance(document.getElementById('modalSupplier')).hide(); loadPembelianData(); }).tambahSupplier({nama:document.getElementById('sup-nama').value, hp:document.getElementById('sup-hp').value, alamat:document.getElementById('sup-alamat').value});
-  }
-  function updateHargaBeli() {
-    const sel = document.getElementById('beli-produk');
-    const price = sel.options[sel.selectedIndex]?.getAttribute('data-buy') || 0;
-    const qty = document.getElementById('beli-qty').value;
-    document.getElementById('beli-harga').value = price;
-    document.getElementById('beli-total').innerText = rupiah(price * qty);
-  }
+function simpanSupplier() {
+    // 1. Ambil Data dari Form
+    const nama = document.getElementById('sup-nama').value;
+    const hp = document.getElementById('sup-hp').value;
+    const alamat = document.getElementById('sup-alamat').value;
+
+    // 2. Validasi (Agar tidak simpan data kosong)
+    if(!nama) return myAlert('Gagal', 'Nama Supplier wajib diisi!', 'error');
+
+    // 3. Tampilkan Loading
+    loading(true);
+
+    const dataKirim = { nama: nama, hp: hp, alamat: alamat };
+
+    google.script.run.withSuccessHandler(() => {
+        // 4. Matikan Loading
+        loading(false);
+
+        // 5. Tutup Modal
+        const modalEl = document.getElementById('modalSupplier');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) modalInstance.hide();
+
+        // 6. TAMPILKAN POPUP BERHASIL (Ini yang tadinya hilang)
+        myAlert('Berhasil', 'Data Supplier berhasil ditambahkan!', 'success');
+
+        // 7. Refresh Dropdown/Data
+        loadPembelianData();
+
+        // 8. Reset Form (Kosongkan inputan)
+        document.getElementById('sup-nama').value = '';
+        document.getElementById('sup-hp').value = '';
+        document.getElementById('sup-alamat').value = '';
+
+    }).tambahSupplier(dataKirim);
+}
+
   function prosesBeli() {
     const d = { supplier: document.getElementById('beli-supplier').value, produk: document.getElementById('beli-produk').value, qty: document.getElementById('beli-qty').value, total: document.getElementById('beli-harga').value * document.getElementById('beli-qty').value, metode:'Tunai', isTukar: document.getElementById('beli-tukar').checked };
     if(confirm('Simpan Beli?')) {
