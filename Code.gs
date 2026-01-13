@@ -16,7 +16,7 @@ function setupDatabase() {
   const sheets = [
     {name: 'USERS', header: ['Username', 'Password', 'Role', 'Nama']},
     {name: 'PRODUK', header: ['ID', 'Nama_Produk', 'Harga_Jual', 'Harga_Beli', 'Stok_Isi', 'Stok_Kosong', 'SKU', 'Kode', 'Link_Gambar']},
-    {name: 'PELANGGAN', header: ['ID', 'Nama', 'NoHP', 'Alamat']},
+    {name: 'PELANGGAN', header: ['ID', 'Nama', 'Nama_Perusahan', 'NoHP', 'Alamat']},
     {name: 'SUPPLIER', header: ['ID', 'Nama_Supplier', 'NoHP', 'Alamat']},
     {name: 'TRANSAKSI', header: ['ID_Trans', 'Waktu', 'Pelanggan', 'Produk', 'Qty', 'Total', 'Tipe', 'Kasir', 'Metode_Bayar', 'Jatuh_Tempo', 'Status']},
     {name: 'PEMBELIAN', header: ['ID_Beli', 'Waktu', 'Supplier', 'Produk', 'Qty', 'Total', 'Metode']},
@@ -222,39 +222,39 @@ function simpanTransaksiBulk(dataTransaksi) {
   return "Transaksi Berhasil Disimpan!";
 }
 
-// --- FITUR PIUTANG (BACKEND) ---
-
-// --- FITUR PIUTANG (VERSI SMART COLUMN) ---
-
 function getDataPiutang() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TRANSAKSI');
-  // Ambil semua data TERMASUK Header (Judul Kolom)
+  // Cek sheet ada atau tidak
+  if (!sheet) return [];
+  
   const allData = sheet.getDataRange().getValues();
-  
-  // Cek jika data kosong
-  if (allData.length < 2) return [];
+  if (allData.length < 2) return []; // Data kosong
 
-  const headers = allData[0]; // Baris pertama adalah Header
+  // 1. Ambil Header dan Normalisasi (Kecilkan semua huruf agar pencarian akurat)
+  const headers = allData[0].map(h => String(h).trim().toLowerCase());
   
-  // [PENTING] Cari urutan kolom secara otomatis berdasarkan Namanya
-  // Ini mencegah error jika kolom tergeser
-  const idxStatus = headers.indexOf('Status'); 
-  const idxJatuhTempo = headers.indexOf('Jatuh_Tempo');
-  const idxMetode = headers.indexOf('Metode_Bayar'); 
-  
-  // Jika kolom Status tidak ditemukan, hentikan (daripada error)
-  if (idxStatus === -1) return [];
+  // 2. Cari Kolom Status & Jatuh Tempo
+  let idxStatus = headers.indexOf('status'); 
+  let idxJatuhTempo = headers.indexOf('jatuh_tempo');
+
+  // [PENTING] FALLBACK: Jika header tidak ketemu (misal karena typo/hidden char),
+  // Kita paksa pakai index kolom K (10) dan J (9) sesuai screenshot Anda.
+  // Index dimulai dari 0 (A=0, ..., J=9, K=10)
+  if (idxStatus === -1) idxStatus = 10; 
+  if (idxJatuhTempo === -1) idxJatuhTempo = 9;
 
   let grouped = {};
 
-  // Loop mulai dari baris ke-2 (Index 1) karena baris 0 adalah Header
   for (let i = 1; i < allData.length; i++) {
     let row = allData[i];
-    let status = row[idxStatus]; // Ambil status dari kolom yang ditemukan tadi
+    
+    // Ambil data status, ubah ke string, trim, dan kecilkan huruf
+    let rawStatus = row[idxStatus];
+    let status = rawStatus ? String(rawStatus).trim().toLowerCase() : '';
 
-    // Logika Filter: Hanya ambil yang "Belum Lunas"
-    if (status === 'Belum Lunas') {
-       let id = row[0]; // ID selalu di kolom pertama
+    // Bandingkan dengan 'belum lunas' (huruf kecil semua agar pasti cocok)
+    if (status === 'belum lunas') {
+       let id = row[0];
        
        if(!grouped[id]) {
           grouped[id] = {
@@ -262,15 +262,13 @@ function getDataPiutang() {
              waktu: row[1],
              pelanggan: row[2],
              total: 0,
-             jatuhTempo: (idxJatuhTempo !== -1) ? row[idxJatuhTempo] : '' // Ambil tgl jika kolom ada
+             jatuhTempo: row[idxJatuhTempo] // Ambil tanggal dari kolom yang sudah ditentukan
           };
        }
-       // Jumlahkan total (Pastikan angka)
-       grouped[id].total += Number(row[5]); 
+       grouped[id].total += Number(row[5]);
     }
   }
-
-  // Kembalikan hasil dalam bentuk Array
+  
   return Object.values(grouped).map(x => [x.id, x.waktu, x.pelanggan, x.total, x.jatuhTempo]);
 }
 
