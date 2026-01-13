@@ -155,7 +155,7 @@ function showPage(pageId) {
         setAutoDate('beli'); // Isi tanggal 1 s/d hari ini
         loadRiwayatBeli();   // Langsung ambil data
     }
-    
+
     if(pageId === 'riwayat-piutang') loadPiutang();
 }
 
@@ -191,7 +191,26 @@ function handleLogin() {
     .loginUser(u, p);
 }
   
-  function logout() { location.reload(); }
+  function logout() {
+    // 1. Tampilkan Loading sebentar agar transisi halus
+    loading(true);
+
+    setTimeout(() => {
+        // 2. Reset Variabel User (Hapus sesi di memori browser)
+        currentUser = {};
+        
+        // 3. Reset Tampilan: Sembunyikan Dashboard, Munculkan Login
+        document.getElementById('main-app').classList.add('d-none'); // Tutup Dashboard
+        document.getElementById('login-section').classList.remove('d-none'); // Buka Login
+
+        // 4. Bersihkan Form Input Login
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+        
+        // 5. Matikan Loading
+        loading(false);
+    }, 500); // Beri jeda 0.5 detik
+}
 
   // --- DASHBOARD ---
   function loadDashboard() {
@@ -588,12 +607,27 @@ const eksekusiBayar = () => {
             loading(true);
         google.script.run.withSuccessHandler(res => {
            loading(false);
-           myAlert('Berhasil', res, 'success'); 
-           resetKeranjang();
+           
+           // 1. Tampilkan Popup Berhasil (Kecil/Toast) - Opsional
+           // myAlert('Berhasil', res, 'success'); <--- Bisa dimatikan agar langsung invoice
+
+           // 2. SIAPKAN DATA UNTUK INVOICE
+           // Kita gunakan ID sementara (Timestamp) agar cepat, atau ambil dari response jika backend mengirim ID
+           const idTrxSementara = 'TRX-' + Date.now(); 
+           
+           tampilkanInvoice(payload, idTrxSementara);
+
+           // 3. RESET DROPDOWN PELANGGAN KE DEFAULT
+           const dropdown = document.getElementById('kasir-pelanggan');
+           dropdown.value = ""; // Reset ke value kosong (Pilih Pelanggan)
+           
+           // Note: resetKeranjang() dipindah ke tombol "Tutup" invoice 
+           // agar data keranjang tidak hilang saat invoice masih tampil.
+           
            loadProduk(); 
         }).withFailureHandler(err => {
            loading(false);
-           myAlert('Gagal', err, 'error');
+           myAlert('Gagal', err.message, 'error');
         }).simpanTransaksiBulk(payload);
 
     });
@@ -638,19 +672,38 @@ function cekNotifHutang() {
     myAlert('Info Tagihan', 'Silakan buka menu Riwayat > Piutang untuk melihat detail penagihan.', 'info');
 }
 
-  function updateHargaBeli() {
-    const sel = document.getElementById('beli-produk');
-    const price = sel.options[sel.selectedIndex]?.getAttribute('data-buy') || 0;
-    const qty = document.getElementById('beli-qty').value;
-    
-    // Auto isi harga beli jika kosong/belum diubah
-    if(document.getElementById('beli-harga').value == '' || document.getElementById('beli-harga').value == 0) {
-        document.getElementById('beli-harga').value = price;
-    }
-    
-    const finalPrice = document.getElementById('beli-harga').value;
-    document.getElementById('beli-subtotal-label').innerText = rupiah(finalPrice * qty);
+// [FIX] Update Harga Beli (Hanya satu fungsi ini saja)
+function updateHargaBeli() {
+  // 1. Definisi Elemen
+  const sel = document.getElementById('beli-produk');
+  const qtyInput = document.getElementById('beli-qty');
+  const hargaInput = document.getElementById('beli-harga');
+  
+  // Perbaiki ID target sesuai HTML Anda (beli-subtotal-label)
+  const labelSubtotal = document.getElementById('beli-subtotal-label'); 
+
+  // 2. Ambil Data
+  // Ambil harga dari atribut data-buy, jika error/kosong kasih nilai 0
+  const priceDatabase = sel.options[sel.selectedIndex]?.getAttribute('data-buy') || 0;
+  const qty = qtyInput.value;
+
+  // 3. Logika Auto-Fill
+  // Jika input harga masih kosong, isi otomatis dari database
+  if(hargaInput.value == '' || hargaInput.value == 0) {
+      hargaInput.value = priceDatabase;
   }
+
+  // 4. Hitung Subtotal (Pakai harga yang ada di input manual)
+  const finalPrice = hargaInput.value;
+  const subtotal = finalPrice * qty;
+
+  // 5. Tampilkan Hasil (Cek dulu elemennya ada atau tidak agar tidak error)
+  if (labelSubtotal) {
+      labelSubtotal.innerText = rupiah(subtotal);
+  } else {
+      console.error("Elemen ID 'beli-subtotal-label' tidak ditemukan di HTML!");
+  }
+}
 
   function tambahKeKeranjangBeli() {
       const prod = document.getElementById('beli-produk').value;
@@ -1203,7 +1256,7 @@ function loadPelanggan() {
     new bootstrap.Modal(document.getElementById('modalPelanggan')).show();
   }
 
-  function simpanPelangganDB() {
+function simpanPelangganDB() {
     const d = {
       id: document.getElementById('pel-id').value,
       nama: document.getElementById('pel-nama').value,
@@ -1212,24 +1265,26 @@ function loadPelanggan() {
       alamat: document.getElementById('pel-alamat').value
     };
 
-    if(!d.nama) return alert('Nama wajib diisi!');
+    if(!d.nama) return myAlert('Peringatan', 'Nama wajib diisi!', 'warning');
 
     loading(true);
     google.script.run.withSuccessHandler(res => {
        loading(false);
-       alert(res);
+       
+       // [1] GANTI ALERT BIASA JADI POPUP KEREN
+       myAlert('Berhasil', res, 'success');
+       
        bootstrap.Modal.getInstance(document.getElementById('modalPelanggan')).hide();
        
        if(isFromKasir) {
-          // Jika input dari kasir, refresh dropdown kasir
-          loadPelangganDropdown(); 
+          // [2] KIRIM NAMA BARU AGAR BISA DI-AUTO SELECT
+          loadPelangganDropdown(d.nama); 
        } else {
-          // Jika dari menu admin, refresh tabel
+          // Jika dari menu admin, refresh tabel seperti biasa
           loadPelanggan();
        }
     }).simpanPelanggan(d);
   }
-
 function hapusPelanggan(id) {
     myConfirm('Hapus Pelanggan', 'Apakah Anda yakin ingin menghapus data pelanggan ini?', () => {
        loading(true);
@@ -1250,27 +1305,25 @@ function hapusPelanggan(id) {
 
   // --- INTEGRASI KE KASIR ---
   
-function loadPelangganDropdown() {
-    // Jangan loading(true) agar tidak mengganggu UI
+function loadPelangganDropdown(targetNama = null) {
     google.script.run.withSuccessHandler(data => {
-       // --- PENGAMAN: Cek jika data kosong/null ---
        if (!data) return; 
 
        const sel = document.getElementById('kasir-pelanggan');
-       const currentVal = sel.value; 
+       sel.innerHTML = '<option value="" disabled selected>- Pilih Pelanggan -</option><option value="Umum">Umum</option>';
        
-       sel.innerHTML = '<option value="Umum">Umum</option>';
-       
+       let valueToSelect = null;
        data.forEach(r => {
           let label = r[1]; 
           if(r[2]) label = `${r[2]} (${r[1]})`; 
           sel.innerHTML += `<option value="${label}">${label}</option>`;
+          if(targetNama && r[1] === targetNama) valueToSelect = label;
        });
 
-       if(currentVal) sel.value = currentVal;
+       if(valueToSelect) sel.value = valueToSelect;
 
     }).getListPelanggan();
-  }
+}
 
   // --- KEUANGAN ---
   function loadKeuangan() {
@@ -1379,55 +1432,68 @@ document.getElementById('pos-metode-bayar').addEventListener('change', function(
     }
 });
 
-// --- FITUR PIUTANG ---
-
-// 1. Load Data Piutang saat menu diklik
-// (Tambahkan ini di dalam fungsi showPage, di bagian blok IF nya)
-// if(pageId === 'riwayat-piutang') loadPiutang(); 
-
 function loadPiutang() {
    loading(true);
-   google.script.run.withSuccessHandler(data => {
-      loading(false);
-      const tb = document.querySelector('#tabel-piutang tbody');
-      tb.innerHTML = '';
-      
-      if(!data || data.length === 0) {
-         tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-4">Tidak ada data hutang yang belum lunas.</td></tr>';
-         return;
-      }
+   console.log("Meminta data piutang..."); // Debug 1
 
-      data.forEach(row => {
-         // row: [ID, Waktu, Pelanggan, Total, JatuhTempo]
-         let tglTempo = new Date(row[4]).toLocaleDateString('id-ID');
-         let tglTrx = new Date(row[1]).toLocaleDateString('id-ID');
-         
-         // Cek jika sudah lewat jatuh tempo (warna merah)
-         let isLate = new Date(row[4]) < new Date();
-         let tempoStyle = isLate ? 'text-danger fw-bold' : 'text-dark';
-         let badgeLate = isLate ? '<span class="badge bg-danger">Lewat Jatuh Tempo</span>' : '';
+   google.script.run
+     .withFailureHandler(err => {
+         loading(false);
+         myAlert('Error', err.message, 'error');
+     })
+     .withSuccessHandler(data => {
+        loading(false);
+        console.log("Data diterima:", data); // Debug 2: Cek di Console Browser (F12)
+        
+        const tb = document.querySelector('#tabel-piutang tbody');
+        tb.innerHTML = '';
+        
+        if(!data || data.length === 0) {
+           tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-4">Data Kosong (Backend OK, tapi hasil 0).</td></tr>';
+           return;
+        }
 
-         tb.innerHTML += `
-           <tr>
-              <td>
-                 <div class="${tempoStyle}">${tglTempo}</div>
-                 ${badgeLate}
-                 <small class="text-muted d-block">Trx: ${tglTrx}</small>
-              </td>
-              <td>
-                 <span class="fw-bold">${row[2]}</span><br>
-                 <small class="text-muted text-truncate d-block" style="max-width:200px">ID: ${row[0]}</small>
-              </td>
-              <td class="fw-bold fs-5 text-danger">${rupiah(row[3])}</td>
-              <td>
-                 <button class="btn btn-success btn-sm rounded-pill px-3 fw-bold" onclick="prosesPelunasan('${row[0]}', '${row[2]}', ${row[3]})">
-                    <i class="material-icons align-middle" style="font-size:16px">payments</i> LUNASI
-                 </button>
-              </td>
-           </tr>
-         `;
-      });
-   }).getDataPiutang();
+        data.forEach(row => {
+           // row: [0:ID, 1:WaktuStr, 2:Pelanggan, 3:Total, 4:JatuhTempoStr]
+           
+           // Format Tanggal dari String ISO
+           let tglTempo = '-';
+           let isLate = false;
+
+           if(row[4] && row[4].length > 5) {
+               let d = new Date(row[4]);
+               tglTempo = d.toLocaleDateString('id-ID'); // Ubah ke format Indo
+               
+               // Cek Telat
+               if(d < new Date()) isLate = true;
+           }
+
+           let tglTrx = row[1] ? new Date(row[1]).toLocaleDateString('id-ID') : '-';
+           
+           // Styling
+           let tempoStyle = isLate ? 'text-danger fw-bold' : 'text-dark';
+           let badgeLate = isLate ? '<span class="badge bg-danger ms-1" style="font-size:9px">Telat</span>' : '';
+
+           tb.innerHTML += `
+             <tr>
+                <td>
+                   <div class="${tempoStyle}">${tglTempo} ${badgeLate}</div>
+                   <small class="text-muted d-block" style="font-size:11px">Trx: ${tglTrx}</small>
+                </td>
+                <td>
+                   <span class="fw-bold text-dark">${row[2]}</span><br>
+                   <small class="text-muted text-truncate d-block" style="max-width:150px; font-size:10px">${row[0]}</small>
+                </td>
+                <td class="fw-bold text-danger">${rupiah(row[3])}</td>
+                <td>
+                   <button class="btn btn-success btn-sm rounded-pill px-3 py-1 fw-bold" onclick="prosesPelunasan('${row[0]}', '${row[2]}', ${row[3]})" style="font-size:11px">
+                      LUNAS
+                   </button>
+                </td>
+             </tr>
+           `;
+        });
+     }).getDataPiutang();
 }
 
 function prosesPelunasan(id, nama, total) {
@@ -1442,4 +1508,79 @@ function prosesPelunasan(id, nama, total) {
         }).lunasiHutang(id, total, nama);
     });
 }
+
+function filterTabelPiutang() {
+   // Ambil apa yang diketik user
+   const keyword = document.getElementById('cari-piutang').value.toLowerCase();
+   
+   // Ambil semua baris di tabel piutang
+   const rows = document.querySelectorAll('#tabel-piutang tbody tr');
+   
+   rows.forEach(tr => {
+      // Ambil teks di dalam baris tersebut
+      const text = tr.innerText.toLowerCase();
+      
+      // Jika teks cocok dengan pencarian, tampilkan. Jika tidak, sembunyikan.
+      if (text.includes(keyword)) {
+         tr.style.display = '';
+      } else {
+         tr.style.display = 'none';
+      }
+   });
+}
+
+function tampilkanInvoice(dataPayload, idTrx) {
+    // 1. Isi Data Header
+    document.getElementById('inv-no').innerText = idTrx;
+    document.getElementById('inv-date').innerText = new Date().toLocaleString('id-ID');
+    document.getElementById('inv-pelanggan').innerText = dataPayload.pelanggan;
+    document.getElementById('inv-kasir').innerText = dataPayload.kasir;
+    document.getElementById('inv-metode').innerText = "Metode Bayar: " + dataPayload.metode;
+
+    // 2. Isi Tabel Barang
+    const tbody = document.getElementById('inv-items-body');
+    tbody.innerHTML = '';
+    let grandTotal = 0;
+
+    dataPayload.items.forEach(item => {
+        grandTotal += item.total;
+        tbody.innerHTML += `
+            <tr>
+                <td class="text-start">${item.produkNama}<br><small class="text-muted fst-italic">${item.tipe}</small></td>
+                <td>${rupiah(item.hargaSatuan)}</td>
+                <td>${item.qty}</td>
+                <td class="text-end fw-bold">${rupiah(item.total)}</td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('inv-grand-total').innerText = rupiah(grandTotal);
+
+    // 3. Tampilkan Modal
+    new bootstrap.Modal(document.getElementById('modalInvoice')).show();
+}
+
+function tutupInvoice() {
+    // Saat invoice ditutup, baru reset keranjang
+    resetKeranjang(); 
+}
+
+function updateTime() {
+            const now = new Date();
+            // Format: DD/MM/YYYY, HH.mm.ss
+            const dateStr = now.toLocaleDateString('id-ID'); // 13/1/2026
+            const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/:/g, '.');
+            
+            document.getElementById('invoice-date').innerText = `${dateStr}, ${timeStr}`;
+        }
+
+        // 2. Fungsi membuat No Transaksi Acak (Dummy Dinamis)
+        function generateTrx() {
+            const randomId = Math.floor(Date.now() + Math.random());
+            document.getElementById('invoice-trx').innerText = 'TRX-' + randomId;
+        }
+
+        // Jalankan fungsi saat halaman dibuka
+        updateTime();
+        generateTrx();
 </script>
