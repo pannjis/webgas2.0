@@ -426,4 +426,25 @@
 .empty-space {
     height: 20px;
 }
+
+/* --- PERBAIKAN TAMPILAN INPUT NOMOR (MODAL CEK TABUNG) --- */
+  
+  /* 1. Hilangkan Panah Up/Down (Spinner) bawaan Browser */
+  /* Chrome, Safari, Edge, Opera */
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+  }
+  /* Firefox */
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+
+  /* 2. Hilangkan Ikon Pentung Merah (Validasi Bootstrap) */
+  /* Agar tidak menimpa angka saat error */
+  .form-control.is-invalid {
+      background-image: none !important; /* Hapus ikon background */
+      padding-right: 0.75rem !important; /* Reset padding kanan */
+  }
 </style>
