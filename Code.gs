@@ -224,51 +224,47 @@ function simpanTransaksiBulk(dataTransaksi) {
 
 function getDataPiutang() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TRANSAKSI');
-  // Cek sheet ada atau tidak
   if (!sheet) return [];
   
   const allData = sheet.getDataRange().getValues();
-  if (allData.length < 2) return []; // Data kosong
+  if (allData.length < 2) return [];
 
-  // 1. Ambil Header dan Normalisasi (Kecilkan semua huruf agar pencarian akurat)
-  const headers = allData[0].map(h => String(h).trim().toLowerCase());
-  
-  // 2. Cari Kolom Status & Jatuh Tempo
-  let idxStatus = headers.indexOf('status'); 
-  let idxJatuhTempo = headers.indexOf('jatuh_tempo');
-
-  // [PENTING] FALLBACK: Jika header tidak ketemu (misal karena typo/hidden char),
-  // Kita paksa pakai index kolom K (10) dan J (9) sesuai screenshot Anda.
-  // Index dimulai dari 0 (A=0, ..., J=9, K=10)
-  if (idxStatus === -1) idxStatus = 10; 
-  if (idxJatuhTempo === -1) idxJatuhTempo = 9;
+  // 1. Setup Index Kolom (Paksa index sesuai screenshot Anda)
+  // Status = Kolom K (Index 10), Jatuh Tempo = Kolom J (Index 9)
+  const idxStatus = 10; 
+  const idxJatuhTempo = 9;
 
   let grouped = {};
 
   for (let i = 1; i < allData.length; i++) {
     let row = allData[i];
     
-    // Ambil data status, ubah ke string, trim, dan kecilkan huruf
+    // Baca status, paksa jadi huruf kecil
     let rawStatus = row[idxStatus];
     let status = rawStatus ? String(rawStatus).trim().toLowerCase() : '';
 
-    // Bandingkan dengan 'belum lunas' (huruf kecil semua agar pasti cocok)
+    // Cek "belum lunas"
     if (status === 'belum lunas') {
        let id = row[0];
        
        if(!grouped[id]) {
+          // AMANKAN TANGGAL: Cek apakah valid date, kalau tidak kosongkan
+          let tglWaktu = (row[1] instanceof Date) ? row[1].toISOString() : String(row[1]);
+          let tglTempo = (row[idxJatuhTempo] instanceof Date) ? row[idxJatuhTempo].toISOString() : String(row[idxJatuhTempo]);
+
           grouped[id] = {
              id: id,
-             waktu: row[1],
+             waktu: tglWaktu,      // Kirim sebagai TEXT
              pelanggan: row[2],
              total: 0,
-             jatuhTempo: row[idxJatuhTempo] // Ambil tanggal dari kolom yang sudah ditentukan
+             jatuhTempo: tglTempo  // Kirim sebagai TEXT
           };
        }
        grouped[id].total += Number(row[5]);
     }
   }
   
+  // Return data yang sudah bersih
   return Object.values(grouped).map(x => [x.id, x.waktu, x.pelanggan, x.total, x.jatuhTempo]);
 }
 
